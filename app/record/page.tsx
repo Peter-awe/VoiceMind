@@ -8,6 +8,7 @@ import TranscriptTable, { TableRow } from "@/components/TranscriptTable";
 import AnalysisPanel, { AnalysisEntry } from "@/components/AnalysisPanel";
 import { SpeechResult } from "@/lib/speech";
 import { getApiKey, getSettings, saveRecording } from "@/lib/storage";
+import { translateText, streamAnalysis, streamSummary } from "@/lib/gemini-client";
 
 const LANGUAGES = [
   { code: "en", name: "English" },
@@ -90,27 +91,14 @@ function RecordPageInner() {
       if (!apiKey) return;
 
       try {
-        const res = await fetch("/api/translate", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            text,
-            sourceLang,
-            targetLang,
-          }),
-        });
-
-        const data = await res.json();
-        if (data.translatedText) {
+        const translatedText = await translateText(apiKey, text, sourceLang, targetLang);
+        if (translatedText) {
           setTableRows((prev) => {
             const rows = [...prev];
             if (rows[rowIndex]) {
               rows[rowIndex] = {
                 ...rows[rowIndex],
-                translation: data.translatedText,
+                translation: translatedText,
               };
             }
             return rows;
@@ -150,59 +138,26 @@ function RecordPageInner() {
     lastAnalysisTimeRef.current = Date.now();
     setStreamingAnalysis("");
 
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
-        body: JSON.stringify({ text, targetLang }),
-      });
-
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      if (!reader) return;
-
-      let fullContent = "";
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]" || data === "[ERROR]") continue;
-            try {
-              const token = JSON.parse(data);
-              fullContent += token;
-              setStreamingAnalysis(fullContent);
-            } catch {
-              // skip
-            }
-          }
+    await streamAnalysis(
+      apiKey,
+      text,
+      targetLang,
+      (fullText) => setStreamingAnalysis(fullText),
+      (fullText) => {
+        if (fullText) {
+          setAnalyses((prev) => [
+            ...prev,
+            { content: fullText, timestamp: Date.now() },
+          ]);
+          setStreamingAnalysis("");
+          accumulatedTextRef.current = "";
         }
-      }
-
-      if (fullContent) {
-        setAnalyses((prev) => [
-          ...prev,
-          { content: fullContent, timestamp: Date.now() },
-        ]);
+      },
+      (err) => {
+        console.error("Analysis error:", err);
         setStreamingAnalysis("");
-        // Reset accumulated text after analysis
-        accumulatedTextRef.current = "";
       }
-    } catch (err) {
-      console.error("Analysis error:", err);
-      setStreamingAnalysis("");
-    }
+    );
   }, [targetLang, analysisPaused]);
 
   // Start/stop analysis timer with recording
@@ -332,68 +287,31 @@ function RecordPageInner() {
     setIsSummarizing(true);
     setMeetingSummary("");
 
-    const abortController = new AbortController();
+    let cancelled = false;
 
-    fetch("/api/summarize", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
+    streamSummary(
+      apiKey,
+      fullTranscript,
+      targetLang,
+      (token) => {
+        if (!cancelled) {
+          setMeetingSummary((prev) => prev + token);
+        }
       },
-      body: JSON.stringify({
-        transcript: fullTranscript,
-        targetLang,
-      }),
-      signal: abortController.signal,
-    })
-      .then(async (response) => {
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        if (!reader) return;
-
-        let buffer = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              if (data === "[DONE]") {
-                setIsSummarizing(false);
-                return;
-              }
-              if (data === "[ERROR]") {
-                setIsSummarizing(false);
-                return;
-              }
-              try {
-                const token = JSON.parse(data);
-                setMeetingSummary((prev) => prev + token);
-              } catch {
-                setMeetingSummary((prev) => prev + data);
-              }
-            }
-          }
-        }
-        setIsSummarizing(false);
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Summary fetch error:", err);
-        }
-        setIsSummarizing(false);
-      });
+      () => {
+        if (!cancelled) setIsSummarizing(false);
+      },
+      (err) => {
+        console.error("Summary error:", err);
+        if (!cancelled) setIsSummarizing(false);
+      }
+    );
 
     setTimeout(() => {
       summaryRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 600);
 
-    return () => abortController.abort();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode]);
 
