@@ -45,17 +45,12 @@ export default function ApiKeyGuard({ children }: Props) {
     setError("");
 
     try {
-      const res = await fetch("/api/validate-key", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": key,
-        },
-      });
+      // Validate directly from browser — no server round-trip needed
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
+      );
 
-      const data = await res.json();
-
-      if (data.valid) {
+      if (res.ok) {
         setApiKey(key);
         setValidated(true);
         setTimeout(() => setKeyExists(true), 800);
