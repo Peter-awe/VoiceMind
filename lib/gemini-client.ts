@@ -1,16 +1,16 @@
 // ============================================================
 // gemini-client.ts — Client-side Gemini REST API calls
 // Calls Google API directly from browser, no server needed
-// Includes rate limiting, request queue, and exponential backoff
+// Includes rate limiting, request coalescing, and backoff
 // ============================================================
 
 const MODEL = "gemini-2.0-flash";
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
-// Gemini free tier: 10 RPM → space requests at least 7s apart for safety
-const MIN_REQUEST_INTERVAL_MS = 7000;
+// Gemini free tier: 10 RPM → ensure we never exceed this
+const MIN_REQUEST_INTERVAL_MS = 8000; // ~7.5 RPM max
 const MAX_RETRIES = 2;
-const INITIAL_BACKOFF_MS = 15000; // 15s initial backoff on 429
+const INITIAL_BACKOFF_MS = 20000; // 20s initial backoff on 429
 
 const LANGUAGE_NAMES: Record<string, string> = {
   zh: "Chinese",
@@ -29,82 +29,56 @@ function langName(code: string): string {
   return LANGUAGE_NAMES[code] || code;
 }
 
-// =============== Rate Limiter / Request Queue ===============
-
-type QueuedRequest<T> = {
-  execute: () => Promise<T>;
-  resolve: (value: T) => void;
-  reject: (err: unknown) => void;
-  priority: number; // lower = higher priority
-};
-
-class RateLimiter {
-  private queue: QueuedRequest<unknown>[] = [];
-  private lastRequestTime = 0;
-  private processing = false;
-
-  async enqueue<T>(execute: () => Promise<T>, priority = 1): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      this.queue.push({
-        execute: execute as () => Promise<unknown>,
-        resolve: resolve as (value: unknown) => void,
-        reject,
-        priority,
-      });
-      // Sort: lower priority number = processed first
-      this.queue.sort((a, b) => a.priority - b.priority);
-      this.processQueue();
-    });
-  }
-
-  private async processQueue() {
-    if (this.processing) return;
-    this.processing = true;
-
-    while (this.queue.length > 0) {
-      const item = this.queue.shift()!;
-
-      // Wait for rate limit window
-      const now = Date.now();
-      const elapsed = now - this.lastRequestTime;
-      if (elapsed < MIN_REQUEST_INTERVAL_MS) {
-        const waitTime = MIN_REQUEST_INTERVAL_MS - elapsed;
-        await sleep(waitTime);
-      }
-
-      this.lastRequestTime = Date.now();
-
-      try {
-        const result = await item.execute();
-        item.resolve(result);
-      } catch (err) {
-        item.reject(err);
-      }
-    }
-
-    this.processing = false;
-  }
-
-  // Cancel all pending requests of a given priority or higher
-  cancelLowPriority(minPriority: number) {
-    const cancelled = this.queue.filter((q) => q.priority >= minPriority);
-    this.queue = this.queue.filter((q) => q.priority < minPriority);
-    cancelled.forEach((q) =>
-      q.reject(new Error("Request cancelled — rate limit protection"))
-    );
-  }
-
-  get pendingCount() {
-    return this.queue.length;
-  }
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Singleton rate limiter shared across all Gemini calls
-const rateLimiter = new RateLimiter();
+// =============== Simple Rate Limiter ===============
+// Serialises ALL Gemini calls through a single queue
+// with minimum spacing between requests.
+
+let _busy = false;
+const _queue: Array<{
+  fn: () => Promise<void>;
+  tag: string;
+}> = [];
+
+let _lastRequestTime = 0;
+
+async function drain() {
+  if (_busy) return;
+  _busy = true;
+  while (_queue.length > 0) {
+    const item = _queue.shift()!;
+
+    // Enforce minimum interval
+    const now = Date.now();
+    const wait = MIN_REQUEST_INTERVAL_MS - (now - _lastRequestTime);
+    if (wait > 0) {
+      await sleep(wait);
+    }
+    _lastRequestTime = Date.now();
+
+    try {
+      await item.fn();
+    } catch (e) {
+      console.error(`[gemini-client] ${item.tag} error:`, e);
+    }
+  }
+  _busy = false;
+}
+
+function enqueue(tag: string, fn: () => Promise<void>) {
+  _queue.push({ fn, tag });
+  drain();
+}
+
+/** Remove all queued items with the given tag (does NOT cancel in-flight) */
+function cancelQueued(tag: string) {
+  for (let i = _queue.length - 1; i >= 0; i--) {
+    if (_queue[i].tag === tag) _queue.splice(i, 1);
+  }
+}
 
 // =============== Retry with backoff for 429 ===============
 
@@ -113,106 +87,112 @@ async function fetchWithRetry(
   options: RequestInit,
   maxRetries = MAX_RETRIES
 ): Promise<Response> {
-  let lastError: Error | null = null;
-
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, options);
 
-    if (res.status === 429) {
-      if (attempt < maxRetries) {
-        const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
-        console.warn(
-          `Gemini 429 rate limited. Waiting ${backoff / 1000}s before retry ${attempt + 1}/${maxRetries}...`
-        );
-        await sleep(backoff);
-        continue;
-      }
-      // Final attempt also 429 — return it, caller will handle
-      return res;
-    }
-
-    if (!res.ok) {
-      lastError = new Error(`API error: ${res.status}`);
-      // Don't retry non-429 errors
-      return res;
+    if (res.status === 429 && attempt < maxRetries) {
+      const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+      console.warn(
+        `Gemini 429 — waiting ${backoff / 1000}s then retry ${attempt + 1}/${maxRetries}`
+      );
+      await sleep(backoff);
+      _lastRequestTime = Date.now(); // update so subsequent spacing is correct
+      continue;
     }
 
     return res;
   }
 
-  throw lastError || new Error("fetchWithRetry exhausted");
+  // Should never reach here, but satisfy TS
+  return fetch(url, options);
 }
 
 // =============== Concurrency guard for analysis ===============
 
-let _analysisInProgress = false;
+let _analysisInFlight = false;
 
 export function isAnalysisInProgress(): boolean {
-  return _analysisInProgress;
+  return _analysisInFlight;
 }
 
 // =============== Translation (non-streaming) ===============
-// Priority 0 = high (translation is user-visible, fast)
+// Uses "replace" strategy: if a new translate request arrives while a
+// previous one is still queued, the old queued one is discarded.
 
-export async function translateText(
+export function translateText(
   apiKey: string,
   text: string,
   sourceLang: string,
   targetLang: string
 ): Promise<string> {
-  // Skip empty text
-  if (!text.trim()) return "";
+  if (!text.trim()) return Promise.resolve("");
 
-  return rateLimiter.enqueue(async () => {
-    const res = await fetchWithRetry(
-      `${BASE_URL}/models/${MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
+  // Cancel any previously-queued (not yet started) translation
+  cancelQueued("translate");
+
+  return new Promise<string>((resolve) => {
+    enqueue("translate", async () => {
+      try {
+        const res = await fetchWithRetry(
+          `${BASE_URL}/models/${MODEL}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
                 {
-                  text: `Translate the following text from ${langName(sourceLang)} to ${langName(targetLang)}. Return ONLY the translated text, nothing else.\n\nText: ${text}`,
+                  role: "user",
+                  parts: [
+                    {
+                      text: `Translate the following text from ${langName(sourceLang)} to ${langName(targetLang)}. Return ONLY the translated text, nothing else.\n\nText: ${text}`,
+                    },
+                  ],
                 },
               ],
-            },
-          ],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
-        }),
+              generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+            }),
+          }
+        );
+
+        if (!res.ok) {
+          resolve("");
+          return;
+        }
+
+        const data = await res.json();
+        resolve(
+          data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
+        );
+      } catch {
+        resolve("");
       }
-    );
-
-    if (!res.ok) return "";
-
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-  }, 0); // priority 0 = highest
+    });
+  });
 }
 
 // =============== Streaming Analysis ===============
-// Priority 1 = medium (analysis is less urgent than translation)
 
-export async function streamAnalysis(
+export function streamAnalysis(
   apiKey: string,
   text: string,
   targetLang: string,
   onToken: (token: string) => void,
   onDone: (fullText: string) => void,
   onError?: (err: string) => void
-): Promise<void> {
-  // Concurrency guard: skip if another analysis is already running
-  if (_analysisInProgress) {
-    console.log("Analysis skipped — another analysis is already in progress");
+): void {
+  // Guard: one at a time
+  if (_analysisInFlight) {
+    console.log("Analysis skipped — one already in flight");
     return;
   }
 
-  _analysisInProgress = true;
+  // Cancel any previously queued analysis
+  cancelQueued("analysis");
 
-  try {
-    await rateLimiter.enqueue(async () => {
+  _analysisInFlight = true;
+
+  enqueue("analysis", async () => {
+    try {
       const res = await fetchWithRetry(
         `${BASE_URL}/models/${MODEL}:streamGenerateContent?key=${apiKey}&alt=sse`,
         {
@@ -242,65 +222,31 @@ ${text}`,
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) return;
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let fullText = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const jsonStr = line.slice(6).trim();
-            if (!jsonStr) continue;
-            try {
-              const data = JSON.parse(jsonStr);
-              const token =
-                data.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (token) {
-                fullText += token;
-                onToken(fullText);
-              }
-            } catch {
-              // skip
-            }
-          }
-        }
-      }
-
-      onDone(fullText);
-    }, 1); // priority 1 = medium
-  } catch (err) {
-    onError?.(String(err));
-  } finally {
-    _analysisInProgress = false;
-  }
+      await readSSE(res, onToken, onDone);
+    } catch (err) {
+      onError?.(String(err));
+    } finally {
+      _analysisInFlight = false;
+    }
+  });
 }
 
 // =============== Streaming Summary ===============
-// Priority 0 = high (user explicitly triggered post-meeting)
 
-export async function streamSummary(
+export function streamSummary(
   apiKey: string,
   transcript: string,
   targetLang: string,
   onToken: (token: string) => void,
   onDone: () => void,
   onError?: (err: string) => void
-): Promise<void> {
-  // Cancel any pending low-priority requests (analysis) when summarizing
-  rateLimiter.cancelLowPriority(1);
+): void {
+  // Cancel anything low-priority still queued
+  cancelQueued("translate");
+  cancelQueued("analysis");
 
-  try {
-    await rateLimiter.enqueue(async () => {
+  enqueue("summary", async () => {
+    try {
       const res = await fetchWithRetry(
         `${BASE_URL}/models/${MODEL}:streamGenerateContent?key=${apiKey}&alt=sse`,
         {
@@ -347,41 +293,93 @@ ${transcript}`,
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) return;
+      await readSSEraw(res, onToken, onDone);
+    } catch (err) {
+      onError?.(String(err));
+    }
+  });
+}
 
-      const decoder = new TextDecoder();
-      let buffer = "";
+// =============== SSE helpers ===============
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+/** Read SSE stream, accumulating full text and calling onToken with it */
+async function readSSE(
+  res: Response,
+  onToken: (fullText: string) => void,
+  onDone: (fullText: string) => void
+) {
+  const reader = res.body?.getReader();
+  if (!reader) return;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const jsonStr = line.slice(6).trim();
-            if (!jsonStr) continue;
-            try {
-              const data = JSON.parse(jsonStr);
-              const token =
-                data.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (token) {
-                onToken(token);
-              }
-            } catch {
-              // skip
-            }
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+        try {
+          const data = JSON.parse(jsonStr);
+          const t = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (t) {
+            fullText += t;
+            onToken(fullText);
           }
+        } catch {
+          // skip
         }
       }
-
-      onDone();
-    }, 0); // priority 0 = highest
-  } catch (err) {
-    onError?.(String(err));
+    }
   }
+
+  onDone(fullText);
+}
+
+/** Read SSE stream, calling onToken with each new chunk (not accumulated) */
+async function readSSEraw(
+  res: Response,
+  onToken: (chunk: string) => void,
+  onDone: () => void
+) {
+  const reader = res.body?.getReader();
+  if (!reader) return;
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+        try {
+          const data = JSON.parse(jsonStr);
+          const t = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (t) onToken(t);
+        } catch {
+          // skip
+        }
+      }
+    }
+  }
+
+  onDone();
 }

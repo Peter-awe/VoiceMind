@@ -23,9 +23,9 @@ const LANGUAGES = [
   { code: "ar", name: "Arabic" },
 ];
 
-// Translation buffer config
-const TRANSLATION_CHAR_THRESHOLD = 120;
-const TRANSLATION_SILENCE_MS = 5000;
+// Translation buffer — bigger buffer = fewer API calls
+const TRANSLATION_CHAR_THRESHOLD = 300;
+const TRANSLATION_SILENCE_MS = 8000;
 
 export default function RecordPage() {
   return (
@@ -127,7 +127,7 @@ function RecordPageInner() {
 
   // ----------- Analysis Logic -----------
 
-  const triggerAnalysis = useCallback(async () => {
+  const triggerAnalysis = useCallback(() => {
     const text = accumulatedTextRef.current;
     if (!text.trim() || text.length < 50) return;
     if (analysisPaused) return;
@@ -140,7 +140,7 @@ function RecordPageInner() {
     lastAnalysisTimeRef.current = Date.now();
     setStreamingAnalysis("");
 
-    await streamAnalysis(
+    streamAnalysis(
       apiKey,
       text,
       targetLang,
