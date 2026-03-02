@@ -7,8 +7,9 @@ import AudioRecorder from "@/components/AudioRecorder";
 import TranscriptTable, { TableRow } from "@/components/TranscriptTable";
 import AnalysisPanel, { AnalysisEntry } from "@/components/AnalysisPanel";
 import { SpeechResult } from "@/lib/speech";
-import { getApiKey, getSettings, saveRecording } from "@/lib/storage";
-import { translateText, streamAnalysis, streamSummary, isAnalysisInProgress } from "@/lib/gemini-client";
+import { getApiKey, getSettings, getProvider as getProviderName, saveRecording } from "@/lib/storage";
+import { getProvider } from "@/lib/ai-provider";
+import type { AIProvider } from "@/lib/ai-provider";
 
 const LANGUAGES = [
   { code: "en", name: "English" },
@@ -38,6 +39,27 @@ export default function RecordPage() {
 function RecordPageInner() {
   // Load settings
   const settings = getSettings();
+
+  // AI Provider ref (loaded async)
+  const providerRef = useRef<AIProvider | null>(null);
+  const providerNameRef = useRef<string>("");
+
+  // Helper: get or create provider instance
+  const getAI = useCallback(async (): Promise<AIProvider | null> => {
+    const name = getProviderName();
+    const key = getApiKey();
+    if (!key) return null;
+
+    // Reuse if same provider
+    if (providerRef.current && providerNameRef.current === `${name}:${key}`) {
+      return providerRef.current;
+    }
+
+    const p = await getProvider(name, key);
+    providerRef.current = p;
+    providerNameRef.current = `${name}:${key}`;
+    return p;
+  }, []);
 
   // Session config
   const [sourceLang, setSourceLang] = useState(settings.sourceLang);
@@ -86,20 +108,16 @@ function RecordPageInner() {
   const flushTranslation = useCallback(
     async (text: string, rowIndex: number) => {
       if (!text.trim()) return;
-
-      const apiKey = getApiKey();
-      if (!apiKey) return;
+      const ai = await getAI();
+      if (!ai) return;
 
       try {
-        const translatedText = await translateText(apiKey, text, sourceLang, targetLang);
+        const translatedText = await ai.translateText(text, sourceLang, targetLang);
         if (translatedText) {
           setTableRows((prev) => {
             const rows = [...prev];
             if (rows[rowIndex]) {
-              rows[rowIndex] = {
-                ...rows[rowIndex],
-                translation: translatedText,
-              };
+              rows[rowIndex] = { ...rows[rowIndex], translation: translatedText };
             }
             return rows;
           });
@@ -108,7 +126,7 @@ function RecordPageInner() {
         console.error("Translation error:", err);
       }
     },
-    [sourceLang, targetLang]
+    [sourceLang, targetLang, getAI]
   );
 
   const scheduleTranslation = useCallback(() => {
@@ -127,21 +145,19 @@ function RecordPageInner() {
 
   // ----------- Analysis Logic -----------
 
-  const triggerAnalysis = useCallback(() => {
+  const triggerAnalysis = useCallback(async () => {
     const text = accumulatedTextRef.current;
     if (!text.trim() || text.length < 50) return;
     if (analysisPaused) return;
-    // Skip if another analysis is already in progress (rate limit protection)
-    if (isAnalysisInProgress()) return;
 
-    const apiKey = getApiKey();
-    if (!apiKey) return;
+    const ai = await getAI();
+    if (!ai) return;
+    if (ai.isAnalysisInProgress()) return;
 
     lastAnalysisTimeRef.current = Date.now();
     setStreamingAnalysis("");
 
-    streamAnalysis(
-      apiKey,
+    ai.streamAnalysis(
       text,
       targetLang,
       (fullText) => setStreamingAnalysis(fullText),
@@ -160,7 +176,7 @@ function RecordPageInner() {
         setStreamingAnalysis("");
       }
     );
-  }, [targetLang, analysisPaused]);
+  }, [targetLang, analysisPaused, getAI]);
 
   // Start/stop analysis timer with recording
   useEffect(() => {
@@ -171,7 +187,7 @@ function RecordPageInner() {
         if (elapsed >= interval) {
           triggerAnalysis();
         }
-      }, 10000); // Check every 10 seconds (rate limit protection)
+      }, 10000);
     } else {
       if (analysisTimerRef.current) {
         clearInterval(analysisTimerRef.current);
@@ -191,7 +207,6 @@ function RecordPageInner() {
   const handleSpeechResult = useCallback(
     (result: SpeechResult) => {
       if (result.isFinal) {
-        // Add as a new row
         setTableRows((prev) => {
           const newRow: TableRow = {
             text: result.text,
@@ -202,11 +217,9 @@ function RecordPageInner() {
           return newRows;
         });
 
-        // Buffer for translation
         translationBufferRef.current += " " + result.text;
         accumulatedTextRef.current += " " + result.text;
 
-        // Check if buffer is large enough
         if (translationBufferRef.current.length >= TRANSLATION_CHAR_THRESHOLD) {
           const text = translationBufferRef.current;
           const idx = currentRowIndexRef.current;
@@ -214,7 +227,6 @@ function RecordPageInner() {
           if (translationTimerRef.current) {
             clearTimeout(translationTimerRef.current);
           }
-          // Use setTimeout to let state settle
           setTimeout(() => flushTranslation(text.trim(), idx), 50);
         } else {
           scheduleTranslation();
@@ -236,14 +248,12 @@ function RecordPageInner() {
         recordingStatus === "recording" || recordingStatus === "paused";
 
       if (wasActive && status === "idle" && tableRows.length > 0) {
-        // Flush remaining translation buffer
         const remainingText = translationBufferRef.current.trim();
         if (remainingText) {
           flushTranslation(remainingText, currentRowIndexRef.current);
           translationBufferRef.current = "";
         }
 
-        // Save recording to localStorage
         saveRecording({
           title: `Recording ${new Date().toLocaleString()}`,
           sourceLang,
@@ -257,7 +267,6 @@ function RecordPageInner() {
           analyses: analyses.map((a) => a.content),
         });
 
-        // Switch to post-meeting view
         setViewMode("post-meeting");
       }
       setRecordingStatus(status);
@@ -283,31 +292,30 @@ function RecordPageInner() {
     const fullTranscript = tableRows.map((r) => r.text).join(" ");
     if (!fullTranscript.trim()) return;
 
-    const apiKey = getApiKey();
-    if (!apiKey) return;
-
-    setIsSummarizing(true);
-    setMeetingSummary("");
-
     let cancelled = false;
 
-    streamSummary(
-      apiKey,
-      fullTranscript,
-      targetLang,
-      (token) => {
-        if (!cancelled) {
-          setMeetingSummary((prev) => prev + token);
+    (async () => {
+      const ai = await getAI();
+      if (!ai || cancelled) return;
+
+      setIsSummarizing(true);
+      setMeetingSummary("");
+
+      ai.streamSummary(
+        fullTranscript,
+        targetLang,
+        (token) => {
+          if (!cancelled) setMeetingSummary((prev) => prev + token);
+        },
+        () => {
+          if (!cancelled) setIsSummarizing(false);
+        },
+        (err) => {
+          console.error("Summary error:", err);
+          if (!cancelled) setIsSummarizing(false);
         }
-      },
-      () => {
-        if (!cancelled) setIsSummarizing(false);
-      },
-      (err) => {
-        console.error("Summary error:", err);
-        if (!cancelled) setIsSummarizing(false);
-      }
-    );
+      );
+    })();
 
     setTimeout(() => {
       summaryRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -334,11 +342,15 @@ function RecordPageInner() {
     lastAnalysisTimeRef.current = 0;
   }, []);
 
+  // Get display name for current provider
+  const providerDisplayName = settings.provider
+    ? settings.provider.charAt(0).toUpperCase() + settings.provider.slice(1)
+    : "Gemini";
+
   // ===== POST-MEETING VIEW =====
   if (viewMode === "post-meeting") {
     return (
       <div className="h-[calc(100vh-3.5rem)] flex flex-col">
-        {/* Top bar */}
         <div className="h-14 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-slate-300">
@@ -358,9 +370,7 @@ function RecordPageInner() {
           </button>
         </div>
 
-        {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
-          {/* Original grid: TranscriptTable (2/3) + AnalysisPanel (1/3) */}
           <div className="grid grid-cols-3 gap-0 h-[calc(100vh-7rem)] border-b border-slate-600">
             <div className="col-span-2 border-r border-slate-700 overflow-hidden">
               <TranscriptTable
@@ -379,7 +389,6 @@ function RecordPageInner() {
             </div>
           </div>
 
-          {/* Meeting Summary section */}
           <div ref={summaryRef} className="max-w-5xl mx-auto px-6 py-10">
             <div className="flex items-center gap-3 mb-6">
               <h2 className="text-xl font-semibold text-slate-200">
@@ -422,7 +431,6 @@ function RecordPageInner() {
   // ===== RECORDING VIEW =====
   return (
     <div className="h-[calc(100vh-3.5rem)] flex flex-col">
-      {/* Top bar */}
       <div className="h-14 border-b border-slate-700 bg-slate-800/50 flex items-center justify-between px-4">
         <AudioRecorder
           sourceLang={sourceLang}
@@ -431,7 +439,6 @@ function RecordPageInner() {
         />
 
         <div className="flex items-center gap-4">
-          {/* Language selectors */}
           <div className="flex items-center gap-2 text-sm">
             <select
               value={sourceLang}
@@ -468,20 +475,18 @@ function RecordPageInner() {
         </div>
       </div>
 
-      {/* Config panel */}
       {showConfig && (
         <div className="border-b border-slate-700 bg-slate-800/30 px-4 py-3">
           <div className="flex flex-wrap gap-4 text-xs text-slate-400">
             <span>ASR: Web Speech API (free)</span>
             <span>|</span>
-            <span>LLM: Gemini 2.5 Flash (free tier)</span>
+            <span>LLM: {providerDisplayName}</span>
             <span>|</span>
             <span>Analysis interval: {getSettings().analysisInterval}s</span>
           </div>
         </div>
       )}
 
-      {/* Two-panel layout */}
       <div className="flex-1 grid grid-cols-3 gap-0 overflow-hidden">
         <div className="col-span-2 border-r border-slate-700 overflow-hidden">
           <TranscriptTable
@@ -500,7 +505,6 @@ function RecordPageInner() {
         </div>
       </div>
 
-      {/* Status bar */}
       <div className="h-8 border-t border-slate-700 bg-slate-800/50 flex items-center px-4 text-xs text-slate-500">
         <span>
           {tableRows.length} segments |{" "}

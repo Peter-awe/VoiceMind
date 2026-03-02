@@ -2,24 +2,28 @@
 
 import { useState, useEffect } from "react";
 import { KeyRound, ExternalLink, Check, Loader2, AlertTriangle } from "lucide-react";
-import { setApiKey, hasApiKey } from "@/lib/storage";
+import { setApiKey, hasApiKey, getProvider, setProvider } from "@/lib/storage";
+import { PROVIDERS, getProviderInfo, getProvider as createProvider } from "@/lib/ai-provider";
+import type { ProviderName } from "@/lib/ai-provider";
 
 interface Props {
   children: React.ReactNode;
 }
 
 export default function ApiKeyGuard({ children }: Props) {
-  const [keyExists, setKeyExists] = useState<boolean | null>(null); // null = loading
+  const [keyExists, setKeyExists] = useState<boolean | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderName>("gemini");
   const [inputKey, setInputKey] = useState("");
   const [validating, setValidating] = useState(false);
   const [error, setError] = useState("");
   const [validated, setValidated] = useState(false);
 
   useEffect(() => {
-    setKeyExists(hasApiKey());
+    const p = getProvider();
+    setSelectedProvider(p);
+    setKeyExists(hasApiKey(p));
   }, []);
 
-  // Still checking
   if (keyExists === null) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-3.5rem)]">
@@ -28,12 +32,24 @@ export default function ApiKeyGuard({ children }: Props) {
     );
   }
 
-  // Key exists, render children
   if (keyExists) {
     return <>{children}</>;
   }
 
-  // No key — show setup guide
+  const info = getProviderInfo(selectedProvider);
+
+  const handleProviderChange = (name: ProviderName) => {
+    setSelectedProvider(name);
+    setProvider(name);
+    setInputKey("");
+    setError("");
+    setValidated(false);
+    // Check if this provider already has a key
+    if (hasApiKey(name)) {
+      setKeyExists(true);
+    }
+  };
+
   const handleValidate = async () => {
     const key = inputKey.trim();
     if (!key) {
@@ -45,13 +61,11 @@ export default function ApiKeyGuard({ children }: Props) {
     setError("");
 
     try {
-      // Validate directly from browser — no server round-trip needed
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
-      );
+      const provider = await createProvider(selectedProvider, key);
+      const valid = await provider.validateKey();
 
-      if (res.ok) {
-        setApiKey(key);
+      if (valid) {
+        setApiKey(key, selectedProvider);
         setValidated(true);
         setTimeout(() => setKeyExists(true), 800);
       } else {
@@ -74,68 +88,54 @@ export default function ApiKeyGuard({ children }: Props) {
             </div>
             <div>
               <h2 className="text-xl font-semibold text-white">
-                Configure Gemini API Key
+                Choose AI Provider
               </h2>
               <p className="text-sm text-slate-400">
-                Free, no credit card required
+                Select your preferred AI service
               </p>
             </div>
           </div>
 
-          {/* Steps */}
-          <div className="space-y-4 mb-8">
-            <div className="flex gap-3">
-              <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center shrink-0 text-xs font-bold text-slate-300">
-                1
-              </div>
-              <div>
-                <p className="text-sm text-slate-200">
-                  Visit Google AI Studio
-                </p>
-                <a
-                  href="https://aistudio.google.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-1"
-                >
-                  aistudio.google.com
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center shrink-0 text-xs font-bold text-slate-300">
-                2
-              </div>
-              <p className="text-sm text-slate-200">
-                Click &quot;Create API Key&quot; and copy the key
-              </p>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center shrink-0 text-xs font-bold text-slate-300">
-                3
-              </div>
-              <p className="text-sm text-slate-200">
-                Paste your API key below
-              </p>
-            </div>
+          {/* Provider Selection */}
+          <div className="grid grid-cols-3 gap-2 mb-6">
+            {PROVIDERS.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => handleProviderChange(p.name)}
+                className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition ${
+                  selectedProvider === p.name
+                    ? "border-blue-500 bg-blue-500/20 text-blue-300"
+                    : "border-slate-600 bg-slate-800 text-slate-400 hover:border-slate-500"
+                }`}
+              >
+                {p.displayName}
+              </button>
+            ))}
           </div>
 
-          {/* Input */}
+          {/* Provider Info */}
+          <div className="bg-slate-700/30 rounded-lg p-4 mb-6 space-y-2">
+            <p className="text-sm text-slate-300">{info.description}</p>
+            <p className="text-xs text-slate-500">{info.freeInfo}</p>
+            <a
+              href={info.keyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-1"
+            >
+              Get API Key: {info.keyUrlLabel}
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
+          {/* Key Input */}
           <div className="space-y-3">
             <input
               type="password"
               value={inputKey}
-              onChange={(e) => {
-                setInputKey(e.target.value);
-                setError("");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleValidate();
-              }}
-              placeholder="Paste your Gemini API key here..."
+              onChange={(e) => { setInputKey(e.target.value); setError(""); }}
+              onKeyDown={(e) => { if (e.key === "Enter") handleValidate(); }}
+              placeholder={`Paste your ${info.displayName} API key (${info.keyPlaceholder})`}
               className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition"
             />
 
@@ -159,22 +159,15 @@ export default function ApiKeyGuard({ children }: Props) {
               className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition text-sm font-medium flex items-center justify-center gap-2"
             >
               {validating ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Validating...
-                </>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Validating...</>
               ) : validated ? (
-                <>
-                  <Check className="w-4 h-4" />
-                  Verified
-                </>
+                <><Check className="w-4 h-4" /> Verified</>
               ) : (
                 "Validate & Save"
               )}
             </button>
           </div>
 
-          {/* Privacy note */}
           <p className="text-xs text-slate-500 mt-4 text-center">
             Your API key is stored locally in your browser and never sent to our servers.
           </p>
