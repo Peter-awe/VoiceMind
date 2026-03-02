@@ -55,9 +55,10 @@ export class SpeechCapture {
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
-    // Set language — try the code directly, Chrome accepts both "en" and "en-US"
-    if (this._lang) {
-      recognition.lang = this._lang;
+    // Use navigator.language as most reliable source, with user preference as override
+    // Do NOT set recognition.lang if fallback mode — let browser decide completely
+    if (!this._triedFallback) {
+      recognition.lang = navigator.language || "";
     }
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
