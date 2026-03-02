@@ -8,7 +8,7 @@ import TranscriptTable, { TableRow } from "@/components/TranscriptTable";
 import AnalysisPanel, { AnalysisEntry } from "@/components/AnalysisPanel";
 import { SpeechResult } from "@/lib/speech";
 import { getApiKey, getSettings, saveRecording } from "@/lib/storage";
-import { translateText, streamAnalysis, streamSummary } from "@/lib/gemini-client";
+import { translateText, streamAnalysis, streamSummary, isAnalysisInProgress } from "@/lib/gemini-client";
 
 const LANGUAGES = [
   { code: "en", name: "English" },
@@ -131,6 +131,8 @@ function RecordPageInner() {
     const text = accumulatedTextRef.current;
     if (!text.trim() || text.length < 50) return;
     if (analysisPaused) return;
+    // Skip if another analysis is already in progress (rate limit protection)
+    if (isAnalysisInProgress()) return;
 
     const apiKey = getApiKey();
     if (!apiKey) return;
@@ -169,7 +171,7 @@ function RecordPageInner() {
         if (elapsed >= interval) {
           triggerAnalysis();
         }
-      }, 5000); // Check every 5 seconds
+      }, 10000); // Check every 10 seconds (rate limit protection)
     } else {
       if (analysisTimerRef.current) {
         clearInterval(analysisTimerRef.current);
