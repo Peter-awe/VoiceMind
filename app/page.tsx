@@ -339,33 +339,42 @@ export default function LandingPage() {
             </div>
 
             {/* Pro tier */}
-            <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-8">
-              <h3 className="text-2xl font-bold mb-1">Pro</h3>
+            <div className="rounded-xl border border-amber-500/30 bg-gradient-to-b from-amber-500/5 to-slate-800/40 p-8">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-2xl font-bold">Pro</h3>
+                <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-xs rounded-full font-medium">
+                  Popular
+                </span>
+              </div>
               <p className="text-3xl font-bold mb-1">$9.99 <span className="text-sm font-normal text-slate-500">/month</span></p>
+              <p className="text-xs text-slate-500 mb-1">or $99.99/year (save 17%)</p>
               <p className="text-sm text-slate-400 mb-6">
                 For researchers and professionals
               </p>
               <ul className="space-y-3 mb-8">
                 {[
                   "Everything in Free",
-                  "macOS system audio capture",
-                  "Knowledge base (upload papers)",
+                  "AI-enhanced transcript (10hr/mo)",
                   "High-quality LLM translation",
                   "Advanced AI analysis with context",
-                  "Priority support",
+                  "Knowledge base (upload papers)",
+                  "No API key needed — we provide everything",
                 ].map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm text-slate-400">
-                    <Check className="w-4 h-4 text-slate-600 mt-0.5 shrink-0" />
+                  <li key={item} className="flex items-start gap-2.5 text-sm text-slate-300">
+                    <Check className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                     {item}
                   </li>
                 ))}
               </ul>
-              <button
-                disabled
-                className="block w-full py-3 bg-slate-700 text-slate-400 rounded-lg text-center font-medium cursor-not-allowed"
+              <a
+                href="/signup"
+                className="block w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg text-center font-semibold transition"
               >
-                Coming Soon
-              </button>
+                Get Pro
+              </a>
+              <p className="mt-3 text-center text-xs text-slate-500">
+                Also available: $0.99/hr pay-as-you-go
+              </p>
             </div>
           </div>
         </div>

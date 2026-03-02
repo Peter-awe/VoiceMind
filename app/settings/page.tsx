@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   KeyRound,
   Check,
@@ -11,7 +12,10 @@ import {
   Timer,
   Shield,
   Cpu,
+  Crown,
+  CreditCard,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import {
   getApiKey,
   setApiKey,
@@ -41,6 +45,21 @@ const LANGUAGES = [
 ];
 
 export default function SettingsPage() {
+  const { user, profile, isPro, refreshProfile } = useAuth();
+
+  // Check for payment success redirect
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("payment") === "success") {
+        // Refresh profile to pick up new subscription
+        refreshProfile();
+        // Clean URL
+        window.history.replaceState({}, "", "/settings");
+      }
+    }
+  }, [refreshProfile]);
+
   const [settings, setSettings] = useState<AppSettings>({
     sourceLang: "en",
     targetLang: "zh",
@@ -139,7 +158,89 @@ export default function SettingsPage() {
     <div className="max-w-2xl mx-auto py-10 px-6 space-y-8">
       <h1 className="text-2xl font-bold text-white">Settings</h1>
 
-      {/* ===== AI Provider Section ===== */}
+      {/* ===== Subscription Section ===== */}
+      {user && (
+        <div className="panel p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <Crown className={`w-5 h-5 ${isPro ? "text-amber-400" : "text-slate-500"}`} />
+            <h2 className="text-lg font-semibold text-slate-200">
+              Subscription
+            </h2>
+            <span
+              className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                isPro
+                  ? "bg-amber-400/20 text-amber-400"
+                  : "bg-slate-700 text-slate-400"
+              }`}
+            >
+              {isPro ? "Pro" : "Free"}
+            </span>
+          </div>
+
+          {isPro ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-300">Pro Plan Active</p>
+                  <p className="text-xs text-slate-500">
+                    STT used: {(profile?.stt_hours_used || 0).toFixed(1)}h / 10h
+                    this month
+                  </p>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!profile?.stripe_customer_id) return;
+                    const res = await fetch("/api/stripe/portal", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        customerId: profile.stripe_customer_id,
+                      }),
+                    });
+                    const { url } = await res.json();
+                    if (url) window.location.href = url;
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 border border-slate-600 rounded-lg text-sm text-slate-300 hover:text-white hover:border-slate-500 transition"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  Manage Subscription
+                </button>
+              </div>
+              {/* Usage bar */}
+              <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-amber-500 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, ((profile?.stt_hours_used || 0) / 10) * 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-slate-400">
+                Upgrade to Pro for AI-enhanced transcription, high-quality LLM
+                translation, knowledge base, and more.
+              </p>
+              <Link
+                href="/#pricing"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg text-sm font-medium transition"
+              >
+                <Crown className="w-4 h-4" />
+                Upgrade to Pro — $9.99/mo
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== AI Provider Section (Free users) ===== */}
+      {!isPro && (
+        <p className="text-xs text-slate-500 -mb-4">
+          Free users: bring your own API key for translation and analysis.
+          Pro users get everything included.
+        </p>
+      )}
       <div className="panel p-6">
         <div className="flex items-center gap-3 mb-4">
           <Cpu className="w-5 h-5 text-purple-400" />
