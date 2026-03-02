@@ -71,16 +71,11 @@ export default function SettingsPage() {
     setKeyError("");
 
     try {
-      const res = await fetch("/api/validate-key", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": key,
-        },
-      });
-      const data = await res.json();
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
+      );
 
-      if (data.valid) {
+      if (res.ok) {
         setApiKey(key);
         setKeyExists(true);
         setMaskedKey(key.slice(0, 4) + "****" + key.slice(-4));
