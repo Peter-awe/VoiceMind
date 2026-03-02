@@ -17,6 +17,7 @@ export default function AudioRecorder({
 }: Props) {
   const [status, setStatus] = useState<"idle" | "recording" | "paused">("idle");
   const [elapsed, setElapsed] = useState(0);
+  const [speechError, setSpeechError] = useState("");
 
   const speechRef = useRef<SpeechCapture | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -37,15 +38,18 @@ export default function AudioRecorder({
       return;
     }
 
+    setSpeechError("");
     const speech = new SpeechCapture();
     speechRef.current = speech;
 
     speech.onResult = (result) => {
+      setSpeechError(""); // Clear error on successful result
       onResult(result);
     };
 
     speech.onError = (error) => {
       console.error("Speech recognition error:", error);
+      setSpeechError(`Speech error: ${error}`);
     };
 
     speech.onEnd = () => {
@@ -155,6 +159,11 @@ export default function AudioRecorder({
             <Square className="w-4 h-4" />
             Stop
           </button>
+
+          {/* Error display */}
+          {speechError && (
+            <span className="text-xs text-red-400 ml-2">{speechError}</span>
+          )}
         </>
       )}
     </div>

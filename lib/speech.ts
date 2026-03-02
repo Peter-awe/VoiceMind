@@ -102,11 +102,11 @@ export class SpeechCapture {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      // 'no-speech' is normal — happens when nobody speaks
       // 'aborted' is normal — happens when we call stop()
-      if (event.error === "no-speech" || event.error === "aborted") {
+      if (event.error === "aborted") {
         return;
       }
+      // Show all errors including 'no-speech', 'network', 'not-allowed', etc.
       this.onError?.(event.error);
     };
 
