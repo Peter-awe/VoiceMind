@@ -1,7 +1,9 @@
 // ============================================================
 // storage.ts — localStorage wrapper for VoiceMind Light
-// Manages: API Key, Settings, Recordings
+// Manages: Provider, API Keys, Settings, Recordings
 // ============================================================
+
+import type { ProviderName } from "./ai-provider";
 
 // --------------- Types ---------------
 
@@ -9,6 +11,7 @@ export interface AppSettings {
   sourceLang: string;
   targetLang: string;
   analysisInterval: number; // seconds
+  provider: ProviderName;
 }
 
 export interface RecordingRow {
@@ -31,27 +34,60 @@ export interface Recording {
 
 // --------------- Keys ---------------
 
-const KEY_API_KEY = "voicemind_gemini_api_key";
 const KEY_SETTINGS = "voicemind_settings";
 const KEY_RECORDINGS = "voicemind_recordings";
+const KEY_OLD_GEMINI = "voicemind_gemini_api_key"; // legacy
 
-// --------------- API Key ---------------
+// Each provider's API key stored separately
+function providerKeyName(provider: string): string {
+  return `voicemind_key_${provider}`;
+}
 
-export function getApiKey(): string | null {
+// --------------- Provider & API Key ---------------
+
+export function getProvider(): ProviderName {
+  if (typeof window === "undefined") return "gemini";
+  return (getSettings().provider || "gemini") as ProviderName;
+}
+
+export function setProvider(name: ProviderName): void {
+  saveSettings({ provider: name });
+}
+
+export function getApiKey(provider?: ProviderName): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(KEY_API_KEY);
+  const p = provider || getProvider();
+
+  // Try new format first
+  const key = localStorage.getItem(providerKeyName(p));
+  if (key) return key;
+
+  // Backward compat: migrate old Gemini key
+  if (p === "gemini") {
+    const oldKey = localStorage.getItem(KEY_OLD_GEMINI);
+    if (oldKey) {
+      // Migrate to new format
+      localStorage.setItem(providerKeyName("gemini"), oldKey);
+      localStorage.removeItem(KEY_OLD_GEMINI);
+      return oldKey;
+    }
+  }
+
+  return null;
 }
 
-export function setApiKey(key: string): void {
-  localStorage.setItem(KEY_API_KEY, key);
+export function setApiKey(key: string, provider?: ProviderName): void {
+  const p = provider || getProvider();
+  localStorage.setItem(providerKeyName(p), key);
 }
 
-export function removeApiKey(): void {
-  localStorage.removeItem(KEY_API_KEY);
+export function removeApiKey(provider?: ProviderName): void {
+  const p = provider || getProvider();
+  localStorage.removeItem(providerKeyName(p));
 }
 
-export function hasApiKey(): boolean {
-  return !!getApiKey();
+export function hasApiKey(provider?: ProviderName): boolean {
+  return !!getApiKey(provider);
 }
 
 // --------------- Settings ---------------
@@ -60,6 +96,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   sourceLang: "en",
   targetLang: "zh",
   analysisInterval: 30,
+  provider: "gemini",
 };
 
 export function getSettings(): AppSettings {

@@ -10,6 +10,7 @@ import {
   Globe,
   Timer,
   Shield,
+  Cpu,
 } from "lucide-react";
 import {
   getApiKey,
@@ -19,6 +20,12 @@ import {
   saveSettings,
   AppSettings,
 } from "@/lib/storage";
+import {
+  PROVIDERS,
+  getProviderInfo,
+  getProvider as createProvider,
+} from "@/lib/ai-provider";
+import type { ProviderName } from "@/lib/ai-provider";
 
 const LANGUAGES = [
   { code: "en", name: "English" },
@@ -34,6 +41,14 @@ const LANGUAGES = [
 ];
 
 export default function SettingsPage() {
+  const [settings, setSettings] = useState<AppSettings>({
+    sourceLang: "en",
+    targetLang: "zh",
+    analysisInterval: 30,
+    provider: "gemini",
+  });
+
+  // API key state
   const [keyExists, setKeyExists] = useState(false);
   const [maskedKey, setMaskedKey] = useState("");
   const [editingKey, setEditingKey] = useState(false);
@@ -41,24 +56,30 @@ export default function SettingsPage() {
   const [validating, setValidating] = useState(false);
   const [keyError, setKeyError] = useState("");
   const [keySuccess, setKeySuccess] = useState(false);
-
-  const [settings, setSettings] = useState<AppSettings>({
-    sourceLang: "en",
-    targetLang: "zh",
-    analysisInterval: 30,
-  });
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const key = getApiKey();
-    setKeyExists(!!key);
-    if (key) {
-      setMaskedKey(
-        key.slice(0, 4) + "****" + key.slice(-4)
-      );
-    }
-    setSettings(getSettings());
+    const s = getSettings();
+    setSettings(s);
+    refreshKeyState(s.provider);
   }, []);
+
+  function refreshKeyState(provider: ProviderName) {
+    const key = getApiKey(provider);
+    setKeyExists(!!key);
+    setMaskedKey(key ? key.slice(0, 4) + "****" + key.slice(-4) : "");
+    setEditingKey(false);
+    setInputKey("");
+    setKeyError("");
+  }
+
+  const handleProviderChange = (name: ProviderName) => {
+    const newSettings = { ...settings, provider: name };
+    setSettings(newSettings);
+    saveSettings({ provider: name });
+    refreshKeyState(name);
+    showSaved();
+  };
 
   const handleValidateKey = async () => {
     const key = inputKey.trim();
@@ -71,16 +92,12 @@ export default function SettingsPage() {
     setKeyError("");
 
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
-      );
+      const provider = await createProvider(settings.provider, key);
+      const valid = await provider.validateKey();
 
-      if (res.ok) {
-        setApiKey(key);
-        setKeyExists(true);
-        setMaskedKey(key.slice(0, 4) + "****" + key.slice(-4));
-        setEditingKey(false);
-        setInputKey("");
+      if (valid) {
+        setApiKey(key, settings.provider);
+        refreshKeyState(settings.provider);
         setKeySuccess(true);
         setTimeout(() => setKeySuccess(false), 3000);
       } else {
@@ -94,30 +111,71 @@ export default function SettingsPage() {
   };
 
   const handleRemoveKey = () => {
-    if (!confirm("Remove your API key? You will need to re-enter it to use translation and analysis features.")) return;
-    removeApiKey();
-    setKeyExists(false);
-    setMaskedKey("");
+    if (
+      !confirm(
+        "Remove your API key? You will need to re-enter it to use translation and analysis features."
+      )
+    )
+      return;
+    removeApiKey(settings.provider);
+    refreshKeyState(settings.provider);
   };
+
+  function showSaved() {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
 
   const handleSaveSettings = (updates: Partial<AppSettings>) => {
     const newSettings = { ...settings, ...updates };
     setSettings(newSettings);
     saveSettings(newSettings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    showSaved();
   };
+
+  const info = getProviderInfo(settings.provider);
 
   return (
     <div className="max-w-2xl mx-auto py-10 px-6 space-y-8">
       <h1 className="text-2xl font-bold text-white">Settings</h1>
+
+      {/* ===== AI Provider Section ===== */}
+      <div className="panel p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Cpu className="w-5 h-5 text-purple-400" />
+          <h2 className="text-lg font-semibold text-slate-200">
+            AI Provider
+          </h2>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {PROVIDERS.map((p) => (
+            <button
+              key={p.name}
+              onClick={() => handleProviderChange(p.name)}
+              className={`px-3 py-2.5 rounded-lg border text-sm font-medium transition text-left ${
+                settings.provider === p.name
+                  ? "border-blue-500 bg-blue-500/20 text-blue-300"
+                  : "border-slate-600 bg-slate-800 text-slate-400 hover:border-slate-500"
+              }`}
+            >
+              <div>{p.displayName}</div>
+              <div className="text-[10px] mt-0.5 opacity-60">{p.freeInfo}</div>
+            </button>
+          ))}
+        </div>
+
+        <p className="text-xs text-slate-500">
+          {info.description}
+        </p>
+      </div>
 
       {/* ===== API Key Section ===== */}
       <div className="panel p-6">
         <div className="flex items-center gap-3 mb-4">
           <KeyRound className="w-5 h-5 text-blue-400" />
           <h2 className="text-lg font-semibold text-slate-200">
-            Gemini API Key
+            {info.displayName} API Key
           </h2>
           {keyExists && !editingKey && (
             <span className="flex items-center gap-1 text-xs text-green-400 bg-green-500/20 px-2 py-0.5 rounded-full">
@@ -158,28 +216,21 @@ export default function SettingsPage() {
             {!keyExists && (
               <div className="flex items-center gap-2 text-amber-400 text-sm">
                 <AlertTriangle className="w-4 h-4" />
-                API key not configured. Translation and analysis require a Gemini API key.
+                API key not configured for {info.displayName}.
               </div>
             )}
 
             <div className="bg-slate-700/30 rounded-lg p-4 space-y-2">
-              <p className="text-sm text-slate-300">How to get a free Gemini API key:</p>
-              <ol className="text-xs text-slate-400 space-y-1 list-decimal list-inside">
-                <li>
-                  Visit{" "}
-                  <a
-                    href="https://aistudio.google.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:text-blue-300 inline-flex items-center gap-0.5"
-                  >
-                    aistudio.google.com
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </li>
-                <li>Click &quot;Create API Key&quot;</li>
-                <li>Copy and paste the key below</li>
-              </ol>
+              <p className="text-sm text-slate-300">Get your API key:</p>
+              <a
+                href={info.keyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
+              >
+                {info.keyUrlLabel}
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
 
             <div className="flex gap-2">
@@ -193,7 +244,7 @@ export default function SettingsPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleValidateKey();
                 }}
-                placeholder="Paste your Gemini API key..."
+                placeholder={`Paste your API key (${info.keyPlaceholder})`}
                 className="flex-1 px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
               />
               <button
