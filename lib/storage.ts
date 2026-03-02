@@ -1,5 +1,5 @@
 // ============================================================
-// storage.ts — localStorage wrapper for VoiceMind Light
+// storage.ts — localStorage wrapper for KiwiPenNotes
 // Manages: Provider, API Keys, Settings, Recordings
 // ============================================================
 

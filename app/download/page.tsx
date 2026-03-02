@@ -11,14 +11,14 @@ import {
   Bell,
 } from "lucide-react";
 
-const GITHUB_RELEASE_URL = "https://github.com/Peter-awe/VoiceMind/releases/latest";
+const GITHUB_RELEASE_URL = "https://github.com/Peter-awe/KiwiPenNotes/releases/latest";
 
 export default function DownloadPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-16">
       <div className="text-center mb-16">
-        <h1 className="text-4xl font-bold mb-4">Download VoiceMind</h1>
+        <h1 className="text-4xl font-bold mb-4">Download KiwiPenNotes</h1>
         <p className="text-lg text-slate-400">
           Choose your platform. The web version is always free and ready to use.
         </p>
@@ -132,7 +132,7 @@ export default function DownloadPage() {
           Star the GitHub repo to stay updated on releases.
         </p>
         <a
-          href="https://github.com/Peter-awe/VoiceMind"
+          href="https://github.com/Peter-awe/KiwiPenNotes"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition"

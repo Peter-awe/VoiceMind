@@ -1,5 +1,5 @@
 // ============================================================
-// ai-provider.ts — Multi-provider abstraction for VoiceMind
+// ai-provider.ts — Multi-provider abstraction for KiwiPenNotes
 // Supports: Gemini, DeepSeek, Kimi, OpenAI, Claude, Qwen
 // ============================================================
 

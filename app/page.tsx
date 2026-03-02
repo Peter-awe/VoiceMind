@@ -81,7 +81,7 @@ export default function LandingPage() {
             <div className="w-3 h-3 rounded-full bg-red-500/70" />
             <div className="w-3 h-3 rounded-full bg-amber-500/70" />
             <div className="w-3 h-3 rounded-full bg-green-500/70" />
-            <span className="ml-3 text-xs text-slate-500">VoiceMind &mdash; Recording Session</span>
+            <span className="ml-3 text-xs text-slate-500">KiwiPenNotes &mdash; Recording Session</span>
           </div>
 
           {/* Mock three-panel layout */}
@@ -378,7 +378,7 @@ export default function LandingPage() {
         </h2>
         <p className="text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
           Whether it&apos;s a lab meeting in English, a supervisor call in French,
-          or a study group mixing languages &mdash; VoiceMind captures everything and
+          or a study group mixing languages &mdash; KiwiPenNotes captures everything and
           makes it searchable, translatable, and actionable.
         </p>
 
@@ -410,7 +410,7 @@ export default function LandingPage() {
           </h2>
           <p className="text-lg text-slate-400 mb-10">
             Your next meeting is already complicated enough.
-            Let VoiceMind handle the rest.
+            Let KiwiPenNotes handle the rest.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
@@ -431,8 +431,8 @@ export default function LandingPage() {
       <footer className="border-t border-slate-800 py-10">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold text-white">VoiceMind</span>
-            <span className="text-xs text-slate-500">by Shengmai Intelligence</span>
+            <span className="text-lg font-semibold text-white">KiwiPenNotes</span>
+            <span className="text-xs text-slate-500">by Pansheng Intelligence</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-slate-500">
             <a href="/record" className="hover:text-slate-300 transition">App</a>
@@ -447,7 +447,7 @@ export default function LandingPage() {
             </a>
           </div>
           <p className="text-xs text-slate-600">
-            &copy; 2026 VoiceMind. All rights reserved.
+            &copy; 2026 KiwiPenNotes. All rights reserved.
           </p>
         </div>
       </footer>

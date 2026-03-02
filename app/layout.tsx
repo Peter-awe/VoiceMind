@@ -3,7 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "VoiceMind — Free Real-time Transcription, Translation & AI Analysis",
+  title: "KiwiPenNotes — Free Real-time Transcription, Translation & AI Analysis",
   description:
     "Understand every meeting in every language. Free real-time transcription, instant translation, and AI-powered analysis for international students and researchers.",
   keywords: [
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     "international students",
   ],
   openGraph: {
-    title: "VoiceMind — Free Meeting Transcription & Translation",
+    title: "KiwiPenNotes — Free Meeting Transcription & Translation",
     description:
       "Real-time transcription, instant translation, and AI analysis. 100% free, no sign-up needed.",
     type: "website",
@@ -34,7 +34,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-900 text-slate-100">
         <nav className="h-14 border-b border-slate-700 bg-slate-800/90 backdrop-blur-sm flex items-center px-6 sticky top-0 z-50">
           <Link href="/" className="text-lg font-semibold text-white">
-            VoiceMind
+            KiwiPenNotes
           </Link>
           <div className="flex gap-6 ml-8">
             <Link

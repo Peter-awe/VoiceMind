@@ -1,5 +1,5 @@
 // ============================================================
-// speech.ts — Web Speech API wrapper for VoiceMind Light
+// speech.ts — Web Speech API wrapper for KiwiPenNotes
 // Provides: SpeechCapture class (browser-native ASR, free)
 // ============================================================
 
