@@ -7,9 +7,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { verifyAuth } from "@/lib/server-auth";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const FROM_ADDRESS = "KiwiPenNotes <hello@send.kiwipennotes.com>";
+
+// Lazy init to avoid build-time error when env var is not available
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+}
 
 export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req);
@@ -23,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: FROM_ADDRESS,
       to: email,
       subject: "Welcome to KiwiPenNotes — Let's get started",
