@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider } from "@/lib/i18n";
+import { ThemeProvider } from "@/lib/theme";
 import { NavBar } from "@/components/NavBar";
 import "./globals.css";
 
@@ -32,14 +33,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-slate-900 text-slate-100">
-        <LocaleProvider>
-          <AuthProvider>
-            <NavBar />
-            <main>{children}</main>
-          </AuthProvider>
-        </LocaleProvider>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className="min-h-screen">
+        <ThemeProvider>
+          <LocaleProvider>
+            <AuthProvider>
+              <NavBar />
+              <main>{children}</main>
+            </AuthProvider>
+          </LocaleProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
