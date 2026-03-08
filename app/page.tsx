@@ -564,7 +564,7 @@ export default function LandingPage() {
                       Plus
                     </th>
                     <th className="text-center px-4 py-3 font-semibold text-amber-300 w-24">
-                      Pro
+                      Pro Max
                     </th>
                   </tr>
                 </thead>

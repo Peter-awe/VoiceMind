@@ -46,15 +46,20 @@ const LANGUAGES = [
 export default function SettingsPage() {
   const { user, session, profile, isPro, isPlus, isPaid, refreshProfile } = useAuth();
 
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+
   // Check for payment success redirect
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("payment") === "success") {
+        setPaymentSuccess(true);
         // Refresh profile to pick up new subscription
         refreshProfile();
         // Clean URL
         window.history.replaceState({}, "", "/settings");
+        // Auto-dismiss after 8 seconds
+        setTimeout(() => setPaymentSuccess(false), 8000);
       }
     }
   }, [refreshProfile]);
@@ -157,6 +162,21 @@ export default function SettingsPage() {
     <div className="max-w-2xl mx-auto py-10 px-6 space-y-8">
       <h1 className="text-2xl font-bold text-white">Settings</h1>
 
+      {/* ===== Payment Success Banner ===== */}
+      {paymentSuccess && (
+        <div className="flex items-center gap-3 p-4 bg-emerald-500/15 border border-emerald-500/30 rounded-xl animate-in fade-in">
+          <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-emerald-300">
+              Payment successful! 🎉
+            </p>
+            <p className="text-xs text-emerald-400/70">
+              Your subscription is now active. Enjoy all the premium features!
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ===== Subscription Section ===== */}
       {user && (
         <div className="panel p-6">
@@ -174,7 +194,7 @@ export default function SettingsPage() {
                   : "bg-slate-700 text-slate-400"
               }`}
             >
-              {isPro ? "Pro" : isPlus ? "Plus" : "Free"}
+              {isPro ? "Pro Max" : isPlus ? "Plus" : "Free"}
             </span>
           </div>
 
@@ -182,7 +202,7 @@ export default function SettingsPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-300">{isPro ? "Pro" : "Plus"} Plan Active</p>
+                  <p className="text-sm text-slate-300">{isPro ? "Pro Max" : "Plus"} Plan Active</p>
                   {isPro && (
                     <p className="text-xs text-slate-500">
                       STT used: {(profile?.stt_hours_used || 0).toFixed(1)}h / 10h
@@ -261,7 +281,7 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg text-sm font-medium transition"
                 >
                   <Crown className="w-4 h-4" />
-                  Pro — $9.99/mo
+                  Pro Max — $9.99/mo
                 </button>
               </div>
             </div>
