@@ -1,23 +1,40 @@
 // ============================================================
-// rate-limit.ts — Daily API call rate limiter for Pro LLM routes
+// rate-limit.ts — Daily API call rate limiter for paid LLM routes
 //
 // Uses user_profiles columns to track per-route daily usage.
 // Resets automatically at the start of each new UTC day.
 // Bypasses RLS via SUPABASE_SERVICE_ROLE_KEY.
 //
-// Daily limits (designed for ≥50% profit on $9.99/month plan):
-//   translate: 200/day  (~$0.03 max)
-//   analyze:    60/day  (~$0.11 max)
-//   summarize:  10/day  (~$0.03 max)
-//   Total max cost: ~$0.17/day = ~$5/month per user
+// Tier-based daily limits:
+//   Plus ($1.99/mo):
+//     translate: 50/day   (~$0.0075 max)
+//     analyze:    5/day   (~$0.009 max)
+//     summarize:  2/day   (~$0.006 max)
+//     Total max cost: ~$0.023/day = ~$0.68/month → 66% margin
+//
+//   Pro ($9.99/mo):
+//     translate: 200/day  (~$0.03 max)
+//     analyze:    60/day  (~$0.11 max)
+//     summarize:  10/day  (~$0.03 max)
+//     Total max cost: ~$0.17/day = ~$5/month → 50% margin
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
 
-const DAILY_LIMITS: Record<string, number> = {
-  translate: 200,
-  analyze: 60,
-  summarize: 10,
+type Route = "translate" | "analyze" | "summarize";
+type Tier = "plus" | "pro";
+
+const DAILY_LIMITS: Record<Tier, Record<Route, number>> = {
+  plus: {
+    translate: 50,
+    analyze: 5,
+    summarize: 2,
+  },
+  pro: {
+    translate: 200,
+    analyze: 60,
+    summarize: 10,
+  },
 };
 
 function getAdminSupabase() {
@@ -37,12 +54,15 @@ export interface RateLimitResult {
 /**
  * Check and increment the daily call counter for a given LLM route.
  * Returns whether the request is allowed and how many calls remain.
+ *
+ * @param tier - User's subscription tier ("plus" or "pro")
  */
 export async function checkRateLimit(
   userId: string,
-  route: "translate" | "analyze" | "summarize"
+  route: Route,
+  tier: Tier = "pro"
 ): Promise<RateLimitResult> {
-  const limit = DAILY_LIMITS[route];
+  const limit = DAILY_LIMITS[tier]?.[route] ?? DAILY_LIMITS.pro[route];
   const column = `llm_calls_${route}` as const;
   const supabase = getAdminSupabase();
 

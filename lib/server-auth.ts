@@ -27,7 +27,7 @@ function getAdminSupabase() {
 export interface AuthResult {
   userId: string;
   email: string;
-  tier: "free" | "starter" | "pro";
+  tier: "free" | "plus" | "pro";
   isActive: boolean;
 }
 
@@ -71,7 +71,7 @@ export async function verifyAuth(
 }
 
 /**
- * Require at least starter tier (paid)
+ * Require at least plus tier (paid)
  */
 export async function requirePaid(
   req: NextRequest

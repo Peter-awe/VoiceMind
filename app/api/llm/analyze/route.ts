@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Rate limit check ──
-  const rl = await checkRateLimit(auth.userId, "analyze");
+  const rl = await checkRateLimit(auth.userId, "analyze", auth.tier as "plus" | "pro");
   if (!rl.allowed) {
     return new Response(
       `Daily analysis limit reached (${rl.limit}/day). Resets at midnight UTC.`,

@@ -1,6 +1,6 @@
 // ============================================================
 // POST /api/stripe/checkout — Create a Stripe Checkout Session
-// Body: { plan: "pro_monthly" | "pro_yearly" }
+// Body: { plan: "plus_monthly" | "plus_yearly" | "pro_monthly" | "pro_yearly" }
 // Returns: { url: string } — redirect URL for Stripe Checkout
 // ============================================================
 
@@ -10,6 +10,8 @@ import { verifyAuth } from "@/lib/server-auth";
 
 // Map plan names to env-based price IDs (keeps IDs server-side only)
 const PLAN_PRICES: Record<string, string | undefined> = {
+  plus_monthly: process.env.STRIPE_PRICE_PLUS_MONTHLY,
+  plus_yearly: process.env.STRIPE_PRICE_PLUS_YEARLY,
   pro_monthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
   pro_yearly: process.env.STRIPE_PRICE_PRO_YEARLY,
 };

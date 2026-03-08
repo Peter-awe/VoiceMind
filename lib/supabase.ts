@@ -27,7 +27,7 @@ export const supabase = typeof window !== "undefined" ? getSupabase() : null;
 
 // ---- Types ----
 
-export type SubscriptionTier = "free" | "starter" | "pro";
+export type SubscriptionTier = "free" | "plus" | "pro";
 
 export interface UserProfile {
   id: string;
@@ -76,10 +76,10 @@ export function isPro(profile: UserProfile | null): boolean {
   );
 }
 
-export function isStarter(profile: UserProfile | null): boolean {
+export function isPlus(profile: UserProfile | null): boolean {
   if (!profile) return false;
   return (
-    (profile.subscription_tier === "starter" ||
+    (profile.subscription_tier === "plus" ||
       profile.subscription_tier === "pro") &&
     profile.subscription_status === "active"
   );
@@ -94,6 +94,6 @@ export function canUseEnhancedSTT(profile: UserProfile | null): boolean {
   if (profile.subscription_tier === "pro") {
     return profile.stt_hours_used < 10;
   }
-  // Starter: pay-per-hour, always allowed (billed)
-  return true;
+  // Plus: no STT included
+  return false;
 }

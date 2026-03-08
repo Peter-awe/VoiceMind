@@ -19,7 +19,8 @@ export function getStripe(): Stripe {
 // Price IDs — set these after creating products in Stripe Dashboard
 // Format: price_xxxx (from Stripe)
 export const PRICE_IDS = {
+  plus_monthly_usd: process.env.STRIPE_PRICE_PLUS_MONTHLY || "",
+  plus_yearly_usd: process.env.STRIPE_PRICE_PLUS_YEARLY || "",
   pro_monthly_usd: process.env.STRIPE_PRICE_PRO_MONTHLY || "",
   pro_yearly_usd: process.env.STRIPE_PRICE_PRO_YEARLY || "",
-  starter_hourly_usd: process.env.STRIPE_PRICE_STARTER_HOURLY || "",
 } as const;

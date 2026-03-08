@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Rate limit check ──
-  const rl = await checkRateLimit(auth.userId, "summarize");
+  const rl = await checkRateLimit(auth.userId, "summarize", auth.tier as "plus" | "pro");
   if (!rl.allowed) {
     return new Response(
       `Daily summary limit reached (${rl.limit}/day). Resets at midnight UTC.`,

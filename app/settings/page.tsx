@@ -45,7 +45,7 @@ const LANGUAGES = [
 ];
 
 export default function SettingsPage() {
-  const { user, session, profile, isPro, refreshProfile } = useAuth();
+  const { user, session, profile, isPro, isPlus, isPaid, tier, refreshProfile } = useAuth();
 
   // Check for payment success redirect
   useEffect(() => {
@@ -162,7 +162,7 @@ export default function SettingsPage() {
       {user && (
         <div className="panel p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Crown className={`w-5 h-5 ${isPro ? "text-amber-400" : "text-slate-500"}`} />
+            <Crown className={`w-5 h-5 ${isPaid ? "text-amber-400" : "text-slate-500"}`} />
             <h2 className="text-lg font-semibold text-slate-200">
               Subscription
             </h2>
@@ -170,22 +170,26 @@ export default function SettingsPage() {
               className={`px-2 py-0.5 text-xs rounded-full font-medium ${
                 isPro
                   ? "bg-amber-400/20 text-amber-400"
+                  : isPlus
+                  ? "bg-emerald-400/20 text-emerald-400"
                   : "bg-slate-700 text-slate-400"
               }`}
             >
-              {isPro ? "Pro" : "Free"}
+              {isPro ? "Pro" : isPlus ? "Plus" : "Free"}
             </span>
           </div>
 
-          {isPro ? (
+          {isPaid ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-slate-300">Pro Plan Active</p>
-                  <p className="text-xs text-slate-500">
-                    STT used: {(profile?.stt_hours_used || 0).toFixed(1)}h / 10h
-                    this month
-                  </p>
+                  <p className="text-sm text-slate-300">{isPro ? "Pro" : "Plus"} Plan Active</p>
+                  {isPro && (
+                    <p className="text-xs text-slate-500">
+                      STT used: {(profile?.stt_hours_used || 0).toFixed(1)}h / 10h
+                      this month
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={async () => {
@@ -217,10 +221,30 @@ export default function SettingsPage() {
           ) : (
             <div className="space-y-3">
               <p className="text-sm text-slate-400">
-                Upgrade to Pro for AI-enhanced transcription, high-quality LLM
+                Upgrade for AI-enhanced transcription, high-quality LLM
                 translation, knowledge base, and more.
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {!isPlus && (
+                  <button
+                    onClick={async () => {
+                      if (!user || !session?.access_token) return;
+                      const res = await fetch("/api/stripe/checkout", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${session.access_token}`,
+                        },
+                        body: JSON.stringify({ plan: "plus_monthly" }),
+                      });
+                      const { url } = await res.json();
+                      if (url) window.location.href = url;
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg text-sm font-medium transition"
+                  >
+                    Plus — $1.99/mo
+                  </button>
+                )}
                 <button
                   onClick={async () => {
                     if (!user || !session?.access_token) return;
@@ -238,25 +262,7 @@ export default function SettingsPage() {
                   className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg text-sm font-medium transition"
                 >
                   <Crown className="w-4 h-4" />
-                  Upgrade to Pro — $9.99/mo
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!user || !session?.access_token) return;
-                    const res = await fetch("/api/stripe/checkout", {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${session.access_token}`,
-                      },
-                      body: JSON.stringify({ plan: "pro_yearly" }),
-                    });
-                    const { url } = await res.json();
-                    if (url) window.location.href = url;
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2 border border-amber-500/30 text-amber-400 hover:bg-amber-500/10 rounded-lg text-sm font-medium transition"
-                >
-                  $99.99/yr (save 17%)
+                  Pro — $9.99/mo
                 </button>
               </div>
             </div>
@@ -265,10 +271,10 @@ export default function SettingsPage() {
       )}
 
       {/* ===== AI Provider Section (Free users) ===== */}
-      {!isPro && (
+      {!isPaid && (
         <p className="text-xs text-slate-500 -mb-4">
           Free users: bring your own API key for translation and analysis.
-          Pro users get everything included.
+          Plus and Pro users get everything included.
         </p>
       )}
       <div className="panel p-6">

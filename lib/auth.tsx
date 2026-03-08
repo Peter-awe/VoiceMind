@@ -37,6 +37,8 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
   tier: SubscriptionTier;
   isPro: boolean;
+  isPlus: boolean;
+  isPaid: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -168,8 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? profile.subscription_tier
       : "free";
 
-  const isProUser =
-    tier === "pro" && profile?.subscription_status === "active";
+  const isActive = profile?.subscription_status === "active";
+  const isProUser = tier === "pro" && isActive;
+  const isPlusUser = tier === "plus" && isActive;
+  const isPaidUser = (tier === "plus" || tier === "pro") && isActive;
 
   return (
     <AuthContext.Provider
@@ -186,6 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshProfile,
         tier,
         isPro: isProUser,
+        isPlus: isPlusUser,
+        isPaid: isPaidUser,
       }}
     >
       {children}

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Rate limit check ──
-  const rl = await checkRateLimit(auth.userId, "translate");
+  const rl = await checkRateLimit(auth.userId, "translate", auth.tier as "plus" | "pro");
   if (!rl.allowed) {
     return NextResponse.json(
       { error: `Daily translation limit reached (${rl.limit}/day). Resets at midnight UTC.` },

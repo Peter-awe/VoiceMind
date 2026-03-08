@@ -1,6 +1,7 @@
 // ============================================================
 // POST /api/stripe/webhook — Handle Stripe webhook events
 // Updates Supabase user_profiles on subscription changes
+// Supports Plus and Pro tiers via price ID resolution
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
@@ -8,17 +9,49 @@ import { getStripe } from "@/lib/stripe";
 import { createClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
 
-// Map Stripe price IDs → tier (future-proof for multiple tiers)
-function resolveTierFromSession(session: Stripe.Checkout.Session): string {
-  // Currently only "pro" exists; when adding "starter", add its price ID here
-  // const priceId = session.line_items?.data?.[0]?.price?.id;
-  // For now, any successful checkout = pro
+// Map Stripe price IDs → tier name
+function resolveTier(priceId: string | undefined | null): string {
+  if (!priceId) return "pro"; // backward compat
+
+  const plusPrices = [
+    process.env.STRIPE_PRICE_PLUS_MONTHLY,
+    process.env.STRIPE_PRICE_PLUS_YEARLY,
+  ].filter(Boolean);
+
+  if (plusPrices.includes(priceId)) return "plus";
+
+  // Everything else (pro monthly/yearly, unknown) → pro
   return "pro";
+}
+
+// Extract price ID from a checkout session (needs line_items expansion)
+async function resolveTierFromSession(
+  stripe: Stripe,
+  session: Stripe.Checkout.Session
+): Promise<string> {
+  try {
+    // Retrieve session with line_items expanded
+    const full = await stripe.checkout.sessions.retrieve(session.id, {
+      expand: ["line_items"],
+    });
+    const priceId = full.line_items?.data?.[0]?.price?.id;
+    return resolveTier(priceId);
+  } catch {
+    return "pro"; // fallback
+  }
+}
+
+// Extract price ID from a subscription
+function resolveTierFromSubscription(sub: Stripe.Subscription): string {
+  const priceId = sub.items?.data?.[0]?.price?.id;
+  return resolveTier(priceId);
 }
 
 // Use service role key for admin operations
 function getAdminSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://ggczwqlopjiyuhbnnpgs.supabase.co";
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    "https://ggczwqlopjiyuhbnnpgs.supabase.co";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!url || !key) throw new Error("Supabase admin env vars not set");
   return createClient(url, key);
@@ -66,7 +99,7 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.supabase_user_id;
         if (userId) {
-          const tier = resolveTierFromSession(session);
+          const tier = await resolveTierFromSession(stripe, session);
           await updateUserSubscription(
             userId,
             tier,
@@ -81,13 +114,13 @@ export async function POST(req: NextRequest) {
         const sub = event.data.object as Stripe.Subscription;
         const userId = sub.metadata?.supabase_user_id;
         if (userId) {
+          const tier = resolveTierFromSubscription(sub);
           if (sub.status === "active") {
-            await updateUserSubscription(userId, "pro", "active");
+            await updateUserSubscription(userId, tier, "active");
           } else if (sub.status === "past_due") {
-            // Payment overdue — revoke Pro access until payment resumes
             await updateUserSubscription(userId, "free", "past_due");
           } else {
-            await updateUserSubscription(userId, "pro", sub.status);
+            await updateUserSubscription(userId, tier, sub.status);
           }
         }
         break;
@@ -103,13 +136,14 @@ export async function POST(req: NextRequest) {
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice & { subscription?: string | null };
+        const invoice = event.data.object as Stripe.Invoice & {
+          subscription?: string | null;
+        };
         const sub = invoice.subscription;
         if (sub && typeof sub === "string") {
           const subscription = await stripe.subscriptions.retrieve(sub);
           const userId = subscription.metadata?.supabase_user_id;
           if (userId) {
-            // Payment failed — revoke Pro immediately
             await updateUserSubscription(userId, "free", "past_due");
           }
         }
@@ -118,7 +152,6 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error("Webhook handler error:", err);
-    // Return 500 so Stripe retries the event (up to 3 days)
     return NextResponse.json(
       { error: "Webhook handler failed" },
       { status: 500 }
