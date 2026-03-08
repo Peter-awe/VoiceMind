@@ -11,7 +11,12 @@ export function getStripe(): Stripe {
   if (!_stripe) {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) throw new Error("STRIPE_SECRET_KEY not set");
-    _stripe = new Stripe(key, { apiVersion: "2025-01-27.acacia" as Stripe.LatestApiVersion });
+    _stripe = new Stripe(key, {
+      apiVersion: "2025-01-27.acacia" as Stripe.LatestApiVersion,
+      // Cloudflare Workers doesn't fully support node:http —
+      // use the fetch-based HTTP client to avoid request timeouts.
+      httpClient: Stripe.createFetchHttpClient(),
+    });
   }
   return _stripe;
 }

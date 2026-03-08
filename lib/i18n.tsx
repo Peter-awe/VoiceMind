@@ -163,7 +163,7 @@ const en = {
       cta: "Get Plus",
     },
     pro: {
-      name: "Pro",
+      name: "Pro Max",
       badge: "Best for Power Users",
       price: "$9.99",
       priceYearly: "$99.99",
@@ -180,7 +180,7 @@ const en = {
         "Zero configuration — we provide everything",
         "Priority support",
       ],
-      cta: "Get Pro",
+      cta: "Get Pro Max",
     },
     compare: {
       title: "Feature Comparison",
@@ -229,7 +229,7 @@ const en = {
   },
   userMenu: {
     upgradePlus: "Upgrade to Plus",
-    upgradePro: "Upgrade to Pro",
+    upgradePro: "Upgrade to Pro Max",
     settings: "Settings",
     manageSubscription: "Manage Subscription",
     signOut: "Sign Out",
@@ -381,7 +381,7 @@ const zh: typeof en = {
       cta: "升级 Plus",
     },
     pro: {
-      name: "Pro",
+      name: "Pro Max",
       badge: "专业之选",
       price: "$9.99",
       priceYearly: "$99.99",
@@ -398,7 +398,7 @@ const zh: typeof en = {
         "零配置——我们提供一切",
         "优先客服支持",
       ],
-      cta: "升级 Pro",
+      cta: "升级 Pro Max",
     },
     compare: {
       title: "功能对比",
@@ -446,7 +446,7 @@ const zh: typeof en = {
   },
   userMenu: {
     upgradePlus: "升级至 Plus",
-    upgradePro: "升级至 Pro",
+    upgradePro: "升级至 Pro Max",
     settings: "设置",
     manageSubscription: "管理订阅",
     signOut: "退出登录",

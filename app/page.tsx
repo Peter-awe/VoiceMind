@@ -642,7 +642,7 @@ export default function LandingPage() {
             <span className="text-lg font-semibold text-white">
               {t.footer.brand}
             </span>
-            <span className="text-xs text-slate-500">{t.footer.byline}</span>
+            <span className="text-xs text-amber-400">{t.footer.byline}</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-slate-500">
             <a href="/record" className="hover:text-slate-300 transition">

@@ -36,7 +36,10 @@ export async function GET() {
     addStep("stripe_import", { ok: true });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-01-27.acacia" as any });
+    const stripe = new Stripe(stripeKey, {
+      apiVersion: "2025-01-27.acacia" as any,
+      httpClient: Stripe.createFetchHttpClient(),
+    });
     addStep("stripe_init", { ok: true });
 
     // Step 3: Verify the price exists
