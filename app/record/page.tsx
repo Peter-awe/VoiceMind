@@ -32,8 +32,7 @@ const LANGUAGES = [
   { code: "ar", name: "Arabic" },
 ];
 
-const TRANSLATION_CHAR_THRESHOLD = 300;
-const TRANSLATION_SILENCE_MS = 8000;
+// Translation triggers immediately per sentence (no batching)
 
 export default function RecordPage() {
   const { user, isPro, loading } = useAuth();
@@ -175,6 +174,12 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
   // Knowledge base context (Pro Max only)
   const [kbContext, setKbContext] = useState("");
 
+  // Row counter for translation (avoids async index issues)
+  const rowCountRef = useRef(0);
+
+  // Ref to always access latest tableRows (for manual analysis)
+  const tableRowsRef = useRef<TableRow[]>([]);
+
   // Helper: get client-side provider (free users)
   const getAI = useCallback(async (): Promise<AIProvider | null> => {
     if (proMode) return null; // Pro uses server-side
@@ -210,18 +215,10 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
   const [tableRows, setTableRows] = useState<TableRow[]>([]);
   const [interimText, setInterimText] = useState("");
 
-  // Translation buffer
-  const translationBufferRef = useRef<string>("");
-  const translationTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const currentRowIndexRef = useRef<number>(-1);
-
-  // Analysis
+  // Analysis (manual trigger only)
   const [analyses, setAnalyses] = useState<AnalysisEntry[]>([]);
   const [streamingAnalysis, setStreamingAnalysis] = useState("");
-  const [analysisPaused, setAnalysisPaused] = useState(false);
-  const analysisTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastAnalysisTimeRef = useRef<number>(0);
-  const accumulatedTextRef = useRef<string>("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const analysisInProgressRef = useRef(false);
 
   // Saved recording ID (to update with summary later)
@@ -279,9 +276,15 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
     }
   }, []);
 
-  // ----------- Translation Logic -----------
+  // ----------- Keep tableRows ref in sync (for manual analysis) -----------
 
-  const flushTranslation = useCallback(
+  useEffect(() => {
+    tableRowsRef.current = tableRows;
+  }, [tableRows]);
+
+  // ----------- Translation Logic (per-sentence, no batching) -----------
+
+  const translateRow = useCallback(
     async (text: string, rowIndex: number) => {
       if (!text.trim()) return;
 
@@ -317,45 +320,33 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
     [sourceLang, targetLang, proMode, token, getAI]
   );
 
-  const scheduleTranslation = useCallback(() => {
-    if (translationTimerRef.current) {
-      clearTimeout(translationTimerRef.current);
-    }
-    translationTimerRef.current = setTimeout(() => {
-      const text = translationBufferRef.current;
-      const idx = currentRowIndexRef.current;
-      if (text.trim() && idx >= 0) {
-        flushTranslation(text, idx);
-        translationBufferRef.current = "";
-      }
-    }, TRANSLATION_SILENCE_MS);
-  }, [flushTranslation]);
-
-  // ----------- Analysis Logic -----------
+  // ----------- Analysis Logic (manual trigger only) -----------
 
   const triggerAnalysis = useCallback(async () => {
-    const text = accumulatedTextRef.current;
+    // Gather ALL transcript text from current rows
+    const text = tableRowsRef.current.map((r) => r.text).join(" ");
     if (!text.trim() || text.length < 50) return;
-    if (analysisPaused || analysisInProgressRef.current) return;
+    if (analysisInProgressRef.current) return;
 
     analysisInProgressRef.current = true;
-    lastAnalysisTimeRef.current = Date.now();
+    setIsAnalyzing(true);
     setStreamingAnalysis("");
 
     const handleDone = (fullText: string) => {
       analysisInProgressRef.current = false;
+      setIsAnalyzing(false);
       if (fullText) {
         setAnalyses((prev) => [
           ...prev,
           { content: fullText, timestamp: Date.now() },
         ]);
         setStreamingAnalysis("");
-        accumulatedTextRef.current = "";
       }
     };
 
     const handleError = (err: string) => {
       analysisInProgressRef.current = false;
+      setIsAnalyzing(false);
       console.error("Analysis error:", err);
       setStreamingAnalysis("");
     };
@@ -373,6 +364,7 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
       const ai = await getAI();
       if (!ai) {
         analysisInProgressRef.current = false;
+        setIsAnalyzing(false);
         return;
       }
       ai.streamAnalysis(
@@ -383,67 +375,34 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
         handleError
       );
     }
-  }, [targetLang, analysisPaused, proMode, token, kbContext, getAI]);
+  }, [targetLang, proMode, token, kbContext, getAI]);
 
-  // Analysis timer
-  useEffect(() => {
-    if (recordingStatus === "recording" && !analysisPaused) {
-      const interval = (getSettings().analysisInterval || 30) * 1000;
-      analysisTimerRef.current = setInterval(() => {
-        const elapsed = Date.now() - lastAnalysisTimeRef.current;
-        if (elapsed >= interval) {
-          triggerAnalysis();
-        }
-      }, 10000);
-    } else {
-      if (analysisTimerRef.current) {
-        clearInterval(analysisTimerRef.current);
-        analysisTimerRef.current = null;
-      }
-    }
-    return () => {
-      if (analysisTimerRef.current) clearInterval(analysisTimerRef.current);
-    };
-  }, [recordingStatus, analysisPaused, triggerAnalysis]);
-
-  // ----------- Speech Result Handler -----------
+  // ----------- Speech Result Handler (translate each sentence immediately) -----------
 
   const handleSpeechResult = useCallback(
     (result: SpeechResult) => {
       if (result.isFinal) {
-        setTableRows((prev) => {
-          const newRow: TableRow = {
+        // Capture the row index for this sentence
+        const rowIndex = rowCountRef.current;
+        rowCountRef.current += 1;
+
+        setTableRows((prev) => [
+          ...prev,
+          {
             text: result.text,
             startTime: elapsedRef.current,
-          };
-          const newRows = [...prev, newRow];
-          currentRowIndexRef.current = newRows.length - 1;
-          return newRows;
-        });
+          },
+        ]);
 
-        translationBufferRef.current += " " + result.text;
-        accumulatedTextRef.current += " " + result.text;
-
-        if (
-          translationBufferRef.current.length >= TRANSLATION_CHAR_THRESHOLD
-        ) {
-          const text = translationBufferRef.current;
-          const idx = currentRowIndexRef.current;
-          translationBufferRef.current = "";
-          if (translationTimerRef.current) {
-            clearTimeout(translationTimerRef.current);
-          }
-          setTimeout(() => flushTranslation(text.trim(), idx), 50);
-        } else {
-          scheduleTranslation();
-        }
+        // Translate this sentence immediately into its own row
+        translateRow(result.text, rowIndex);
 
         setInterimText("");
       } else {
         setInterimText(result.text);
       }
     },
-    [flushTranslation, scheduleTranslation]
+    [translateRow]
   );
 
   // ----------- Status Change Handler -----------
@@ -461,12 +420,6 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
       if (wasActive && status === "idle" && tableRows.length > 0) {
         // Stop MediaRecorder
         stopMediaRecorder();
-
-        const remainingText = translationBufferRef.current.trim();
-        if (remainingText) {
-          flushTranslation(remainingText, currentRowIndexRef.current);
-          translationBufferRef.current = "";
-        }
 
         const recId = saveRecording({
           title: `Recording ${new Date().toLocaleString()}`,
@@ -492,7 +445,6 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
       sourceLang,
       targetLang,
       analyses,
-      flushTranslation,
       startMediaRecorder,
       stopMediaRecorder,
     ]
@@ -656,15 +608,13 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
     setInterimText("");
     setAnalyses([]);
     setStreamingAnalysis("");
+    setIsAnalyzing(false);
     setMeetingSummary("");
     setIsSummarizing(false);
     setEnhancing(false);
     setEnhanceMessage("");
     elapsedRef.current = 0;
-    translationBufferRef.current = "";
-    currentRowIndexRef.current = -1;
-    accumulatedTextRef.current = "";
-    lastAnalysisTimeRef.current = 0;
+    rowCountRef.current = 0;
     lastRecordingIdRef.current = "";
     audioChunksRef.current = [];
   }, []);
@@ -737,8 +687,8 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
               <AnalysisPanel
                 analyses={analyses}
                 streamingText=""
-                isPaused={false}
-                onTogglePause={() => {}}
+                isAnalyzing={isAnalyzing}
+                onAnalyze={triggerAnalysis}
               />
             </div>
           </div>
@@ -875,8 +825,8 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
           <AnalysisPanel
             analyses={analyses}
             streamingText={streamingAnalysis}
-            isPaused={analysisPaused}
-            onTogglePause={() => setAnalysisPaused(!analysisPaused)}
+            isAnalyzing={isAnalyzing}
+            onAnalyze={triggerAnalysis}
           />
         </div>
       </div>

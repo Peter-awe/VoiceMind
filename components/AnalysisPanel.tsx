@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { Loader2, Play } from "lucide-react";
 
 export interface AnalysisEntry {
   content: string;
@@ -10,15 +11,15 @@ export interface AnalysisEntry {
 interface Props {
   analyses: AnalysisEntry[];
   streamingText: string;
-  isPaused: boolean;
-  onTogglePause: () => void;
+  isAnalyzing: boolean;
+  onAnalyze: () => void;
 }
 
 export default function AnalysisPanel({
   analyses,
   streamingText,
-  isPaused,
-  onTogglePause,
+  isAnalyzing,
+  onAnalyze,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -33,21 +34,32 @@ export default function AnalysisPanel({
           AI Context Analysis
         </h2>
         <button
-          onClick={onTogglePause}
-          className={`text-xs px-2 py-1 rounded transition ${
-            isPaused
-              ? "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30"
-              : "bg-slate-700 text-slate-400 hover:bg-slate-600"
+          onClick={onAnalyze}
+          disabled={isAnalyzing}
+          className={`text-xs px-3 py-1 rounded transition flex items-center gap-1.5 ${
+            isAnalyzing
+              ? "bg-blue-500/20 text-blue-400 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-500 text-white"
           }`}
         >
-          {isPaused ? "Paused" : "Active"}
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Analyzing…
+            </>
+          ) : (
+            <>
+              <Play className="w-3 h-3" />
+              Analyze
+            </>
+          )}
         </button>
       </div>
 
       <div className="panel-body flex-1 space-y-4">
         {analyses.length === 0 && !streamingText && (
           <p className="text-slate-500 text-sm italic">
-            AI analysis will appear here during recording...
+            Click &quot;Analyze&quot; to get AI insights on the conversation.
           </p>
         )}
 
