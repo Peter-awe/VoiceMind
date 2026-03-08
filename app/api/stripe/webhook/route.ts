@@ -8,6 +8,14 @@ import { getStripe } from "@/lib/stripe";
 import { createClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
 
+// Map Stripe price IDs → tier (future-proof for multiple tiers)
+function resolveTierFromSession(session: Stripe.Checkout.Session): string {
+  // Currently only "pro" exists; when adding "starter", add its price ID here
+  // const priceId = session.line_items?.data?.[0]?.price?.id;
+  // For now, any successful checkout = pro
+  return "pro";
+}
+
 // Use service role key for admin operations
 function getAdminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -58,9 +66,10 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.supabase_user_id;
         if (userId) {
+          const tier = resolveTierFromSession(session);
           await updateUserSubscription(
             userId,
-            "pro",
+            tier,
             "active",
             session.customer as string
           );
@@ -72,8 +81,14 @@ export async function POST(req: NextRequest) {
         const sub = event.data.object as Stripe.Subscription;
         const userId = sub.metadata?.supabase_user_id;
         if (userId) {
-          const status = sub.status === "active" ? "active" : sub.status;
-          await updateUserSubscription(userId, "pro", status);
+          if (sub.status === "active") {
+            await updateUserSubscription(userId, "pro", "active");
+          } else if (sub.status === "past_due") {
+            // Payment overdue — revoke Pro access until payment resumes
+            await updateUserSubscription(userId, "free", "past_due");
+          } else {
+            await updateUserSubscription(userId, "pro", sub.status);
+          }
         }
         break;
       }
@@ -94,7 +109,8 @@ export async function POST(req: NextRequest) {
           const subscription = await stripe.subscriptions.retrieve(sub);
           const userId = subscription.metadata?.supabase_user_id;
           if (userId) {
-            await updateUserSubscription(userId, "pro", "past_due");
+            // Payment failed — revoke Pro immediately
+            await updateUserSubscription(userId, "free", "past_due");
           }
         }
         break;
@@ -102,6 +118,11 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     console.error("Webhook handler error:", err);
+    // Return 500 so Stripe retries the event (up to 3 days)
+    return NextResponse.json(
+      { error: "Webhook handler failed" },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ received: true });

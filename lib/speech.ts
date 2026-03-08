@@ -116,20 +116,26 @@ export class SpeechCapture {
       }
 
       // If language not supported, retry without specifying language
-      if (event.error === "language-not-supported" && !this._triedFallback) {
-        this._triedFallback = true;
-        this._lang = ""; // Use browser default
-        console.warn("Language not supported, falling back to browser default");
-        try {
-          this.recognition?.stop();
-        } catch {
-          // ignore
-        }
-        setTimeout(() => {
-          if (this._running && !this._paused) {
-            this._createAndStart();
+      if (event.error === "language-not-supported") {
+        if (!this._triedFallback) {
+          this._triedFallback = true;
+          this._lang = ""; // Use browser default
+          console.warn("Language not supported, falling back to browser default");
+          try {
+            this.recognition?.stop();
+          } catch {
+            // ignore
           }
-        }, 200);
+          setTimeout(() => {
+            if (this._running && !this._paused) {
+              this._createAndStart();
+            }
+          }, 200);
+          return;
+        }
+        // Fallback also failed — browser doesn't support speech recognition
+        this._running = false;
+        this.onError?.("Your browser doesn't support speech recognition for this language. Please use Google Chrome for the best experience.");
         return;
       }
 
