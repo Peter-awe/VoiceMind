@@ -471,15 +471,14 @@ const LocaleContext = createContext<LocaleContextType>({
 });
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("en");
-
-  // Initialize from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("kpn-locale") as Locale | null;
-    if (saved && (saved === "en" || saved === "zh")) {
-      setLocaleState(saved);
+  // Read localStorage synchronously to avoid flash of wrong language
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("kpn-locale") as Locale | null;
+      if (saved === "en" || saved === "zh") return saved;
     }
-  }, []);
+    return "en";
+  });
 
   const setLocale = (l: Locale) => {
     setLocaleState(l);

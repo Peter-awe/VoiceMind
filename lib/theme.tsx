@@ -26,17 +26,21 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 const STORAGE_KEY = "kpn-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  // Read localStorage synchronously to avoid theme flash
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
+      if (saved === "light" || saved === "dark") return saved;
+    }
+    return "dark";
+  });
   const [mounted, setMounted] = useState(false);
 
-  // Read saved theme on mount
+  // Apply theme class on mount
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const initial = saved || "dark";
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
+    document.documentElement.classList.toggle("dark", theme === "dark");
     setMounted(true);
-  }, []);
+  }, [theme]);
 
   const toggleTheme = useCallback(() => {
     setTheme((prev) => {
