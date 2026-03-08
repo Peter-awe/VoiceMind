@@ -46,7 +46,7 @@ export default function RecordPage() {
     );
   }
 
-  // Pro users skip API key guard — we provide everything
+  // Pro Max users skip API key guard — we provide everything
   if (user && isPro) {
     return <RecordPageInner proMode />;
   }
@@ -60,7 +60,7 @@ export default function RecordPage() {
 }
 
 // =================================================================
-// Pro server-side LLM helpers (used instead of client-side provider)
+// Pro Max server-side LLM helpers (used instead of client-side provider)
 // =================================================================
 
 async function proTranslate(
@@ -172,7 +172,7 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
   const providerRef = useRef<AIProvider | null>(null);
   const providerNameRef = useRef<string>("");
 
-  // Knowledge base context (Pro only)
+  // Knowledge base context (Pro Max only)
   const [kbContext, setKbContext] = useState("");
 
   // Helper: get client-side provider (free users)
@@ -238,16 +238,16 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
   // Elapsed time
   const elapsedRef = useRef(0);
 
-  // Enhanced STT state (Pro)
+  // Enhanced STT state (Pro Max)
   const [enhancing, setEnhancing] = useState(false);
   const [enhanceMessage, setEnhanceMessage] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Auth token for Pro API calls
+  // Auth token for Pro Max API calls
   const token = session?.access_token || "";
 
-  // ----------- MediaRecorder for Pro STT Enhancement -----------
+  // ----------- MediaRecorder for Pro Max STT Enhancement -----------
 
   const startMediaRecorder = useCallback(async () => {
     if (!proMode) return;
@@ -453,7 +453,7 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
       const wasActive =
         recordingStatus === "recording" || recordingStatus === "paused";
 
-      // Start MediaRecorder when recording starts (Pro)
+      // Start MediaRecorder when recording starts (Pro Max)
       if (status === "recording" && recordingStatus === "idle") {
         startMediaRecorder();
       }
@@ -508,7 +508,7 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
     }
   }, [recordingStatus]);
 
-  // ----------- Enhanced STT (Pro) -----------
+  // ----------- Enhanced STT (Pro Max) -----------
 
   const enhanceTranscript = useCallback(async () => {
     if (!proMode || !token || audioChunksRef.current.length === 0) return;
@@ -671,7 +671,7 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
 
   // Display name
   const providerDisplayName = proMode
-    ? "DeepSeek (Pro)"
+    ? "DeepSeek (Pro Max)"
     : settings.provider
       ? settings.provider.charAt(0).toUpperCase() + settings.provider.slice(1)
       : "Gemini";
@@ -687,7 +687,7 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
             </span>
             {proMode && (
               <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full">
-                <Crown className="w-3 h-3" /> Pro
+                <Crown className="w-3 h-3" /> Pro Max
               </span>
             )}
             <span className="text-xs text-slate-500">
@@ -697,7 +697,7 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            {/* Pro: Enhance button */}
+            {/* Pro Max: Enhance button */}
             {proMode && audioChunksRef.current.length > 0 && (
               <button
                 onClick={enhanceTranscript}
@@ -858,7 +858,7 @@ function RecordPageInner({ proMode }: { proMode: boolean }) {
               </>
             )}
           </div>
-          {/* Knowledge Base (Pro only) */}
+          {/* Knowledge Base (Pro Max only) */}
           {proMode && <KnowledgeBase onContextChange={setKbContext} />}
         </div>
       )}

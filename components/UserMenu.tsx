@@ -52,7 +52,7 @@ export function UserMenu() {
 
   // Logged in
   const initials = (user.email || "U")[0].toUpperCase();
-  const tierLabel = isPro ? "Pro" : isPlus ? "Plus" : "Free";
+  const tierLabel = isPro ? "Pro Max" : isPlus ? "Plus" : "Free";
   const tierBadgeClass = isPro
     ? "bg-amber-400/10 text-amber-400"
     : isPlus
@@ -127,7 +127,7 @@ export function UserMenu() {
                 {t.userMenu.upgradePlus}
               </Link>
             )}
-            {/* Plus user → show upgrade to Pro */}
+            {/* Plus user → show upgrade to Pro Max */}
             {isPlus && (
               <button
                 onClick={async () => {

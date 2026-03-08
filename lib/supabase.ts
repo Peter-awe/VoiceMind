@@ -90,7 +90,7 @@ export function canUseEnhancedSTT(profile: UserProfile | null): boolean {
   if (profile.subscription_status !== "active") return false;
   if (profile.subscription_tier === "free") return false;
 
-  // Pro: 10 hours included
+  // Pro Max: 10 hours included
   if (profile.subscription_tier === "pro") {
     return profile.stt_hours_used < 10;
   }

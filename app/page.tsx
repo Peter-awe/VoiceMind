@@ -482,7 +482,7 @@ export default function LandingPage() {
               </button>
             </div>
 
-            {/* ── Pro Tier ── */}
+            {/* ── Pro Max Tier ── */}
             <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/[0.05] to-slate-800/60 p-8 flex flex-col">
               <div className="flex items-center gap-2 mb-3">
                 <h3 className="text-2xl font-bold">{t.pricing.pro.name}</h3>

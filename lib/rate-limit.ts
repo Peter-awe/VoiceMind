@@ -12,7 +12,7 @@
 //     summarize:  2/day   (~$0.006 max)
 //     Total max cost: ~$0.023/day = ~$0.68/month → 66% margin
 //
-//   Pro ($9.99/mo):
+//   Pro Max ($9.99/mo):
 //     translate: 200/day  (~$0.03 max)
 //     analyze:    60/day  (~$0.11 max)
 //     summarize:  10/day  (~$0.03 max)

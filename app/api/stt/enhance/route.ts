@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       .eq("id", auth.userId);
   }
 
-  // Pro: 10 hours included
+  // Pro Max: 10 hours included
   if (profile.subscription_tier === "pro" && hoursUsed >= 10) {
     return NextResponse.json(
       {

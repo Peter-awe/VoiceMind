@@ -293,7 +293,7 @@ export default function SettingsPage() {
       {!isPaid && (
         <p className="text-xs text-slate-500 -mb-4">
           Free users: bring your own API key for translation and analysis.
-          Plus and Pro users get everything included.
+          Plus and Pro Max users get everything included.
         </p>
       )}
       <div className="panel p-6">
