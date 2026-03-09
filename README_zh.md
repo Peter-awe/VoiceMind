@@ -357,7 +357,7 @@ KiwiPenNotes 为国际研究社区而建。
 
 <div align="center">
 
-**由 [潘琪伟 (Ambrose Pan)](https://github.com/Peter-awe) 开发** · 蒙特利尔，加拿大
+**由 [潘琪伟 (Qiwei Pan)](https://github.com/Peter-awe) 开发** · 蒙特利尔，加拿大
 
 [![Website](https://img.shields.io/badge/官网-kiwipennotes.com-45B7AA?style=for-the-badge&logo=google-chrome&logoColor=white)](https://kiwipennotes.com)
 [![GitHub](https://img.shields.io/badge/GitHub-Peter--awe-181717?style=for-the-badge&logo=github)](https://github.com/Peter-awe)

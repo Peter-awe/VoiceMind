@@ -357,7 +357,7 @@ Special thanks to:
 
 <div align="center">
 
-**Built by [Ambrose Pan](https://github.com/Peter-awe)** · Montreal, Canada
+**Built by [Qiwei Pan](https://github.com/Peter-awe)** · Montreal, Canada
 
 [![Website](https://img.shields.io/badge/Website-kiwipennotes.com-45B7AA?style=for-the-badge&logo=google-chrome&logoColor=white)](https://kiwipennotes.com)
 [![GitHub](https://img.shields.io/badge/GitHub-Peter--awe-181717?style=for-the-badge&logo=github)](https://github.com/Peter-awe)
