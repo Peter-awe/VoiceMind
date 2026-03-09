@@ -1,0 +1,51 @@
+appId: com.kiwipennotes.desktop
+productName: KiwiPenNotes
+
+# ---------------------------------------------------------------------------
+# macOS
+# ---------------------------------------------------------------------------
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.png
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  darkModeSupport: true
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Microphone access description shown in macOS permission dialog
+  extendInfo:
+    NSMicrophoneUsageDescription: "KiwiPenNotes needs microphone access to transcribe meetings in real time."
+
+dmg:
+  window:
+    width: 540
+    height: 380
+  contents:
+    - x: 140
+      y: 200
+      type: file
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications
+
+# ---------------------------------------------------------------------------
+# Files to include / exclude
+# ---------------------------------------------------------------------------
+files:
+  - main.js
+  - preload.js
+  - package.json
+
+# ---------------------------------------------------------------------------
+# Publish to GitHub Releases
+# ---------------------------------------------------------------------------
+publish:
+  provider: github
+  owner: Peter-awe
+  repo: KiwiPenNotes-desktop
